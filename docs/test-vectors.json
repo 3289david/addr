@@ -1,0 +1,189 @@
+{
+  "spec": "ADDR-1",
+  "rootNode": "0x04af2c48902dd26fd2f8bec8a25bf74aeb0d9228d684cb02c8cdba87981a8712",
+  "nodeAlgorithm": "node(label.parent) = keccak256(node(parent) || keccak256(label)); node('') = 0x00..00",
+  "names": [
+    {
+      "name": "heelo.addr",
+      "node": "0xc6be5b28095cb0bf4675eb828644f0af473efca8618c4c4619352c650c972e9d"
+    },
+    {
+      "name": "alice.addr",
+      "node": "0xb56fd02a0591326485737ecb6bae8486abdf5afed6977b775d06919c96e4a5c8"
+    },
+    {
+      "name": "shop.heelo.addr",
+      "node": "0xff5b2d4f1c9e4be22bc7d36cbba3a014387898fa285251c4b80d61f067124648"
+    },
+    {
+      "name": "a.addr",
+      "node": "0x141e19327a50f2453de3861f0cad1140166fd25d4851431e7b3e16d70f07b52c"
+    },
+    {
+      "name": "a-b.addr",
+      "node": "0xe80cff582ffeab87bc69ac2d3902fe02b032240b8d4fe0cac9c9cdd9290a43f3"
+    },
+    {
+      "name": "x1.y2.z3.addr",
+      "node": "0xd44135faee39914e07aefd8b993cd5b7bd2a3307972df92cf71b0202e0785731"
+    }
+  ],
+  "normalization": [
+    {
+      "input": " Heelo.ADDR ",
+      "output": "heelo.addr"
+    },
+    {
+      "input": "ALICE.Addr",
+      "output": "alice.addr"
+    }
+  ],
+  "invalidNames": [
+    "heelo",
+    "Heelo.eth",
+    "he_llo.addr",
+    "-ab.addr",
+    "ab-.addr",
+    "a--b.addr",
+    ".addr",
+    "a..addr",
+    "héllo.addr",
+    "a b.addr",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.addr"
+  ],
+  "validAddresses": [
+    {
+      "network": "bitcoin",
+      "coinType": 0,
+      "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+      "stored": "0x76a91462e907b15cbf27d5425399ebf6f0fb50ebb88f1888ac",
+      "roundTrip": true
+    },
+    {
+      "network": "bitcoin",
+      "coinType": 0,
+      "address": "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",
+      "stored": "0xa914b472a266d0bd89c13706a4132ccfb16f7c3b9fcb87",
+      "roundTrip": true
+    },
+    {
+      "network": "bitcoin",
+      "coinType": 0,
+      "address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+      "stored": "0x0014751e76e8199196d454941c45d1b3a323f1433bd6",
+      "roundTrip": true
+    },
+    {
+      "network": "bitcoin",
+      "coinType": 0,
+      "address": "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
+      "stored": "0x512079be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "roundTrip": true
+    },
+    {
+      "network": "litecoin",
+      "coinType": 2,
+      "address": "LLnCCHbSzfwWquEdaS5TF2Yt7uz5Qb1SZ1",
+      "stored": "0x76a914111111111111111111111111111111111111111188ac",
+      "roundTrip": true
+    },
+    {
+      "network": "litecoin",
+      "coinType": 2,
+      "address": "M9TQAWC2R2sGUmWodGk6DH6TNvVxiqXnU6",
+      "stored": "0xa914111111111111111111111111111111111111111187",
+      "roundTrip": true
+    },
+    {
+      "network": "ethereum",
+      "coinType": 60,
+      "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "stored": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "roundTrip": true
+    },
+    {
+      "network": "base",
+      "coinType": 2147492101,
+      "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "stored": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "roundTrip": true
+    },
+    {
+      "network": "tron",
+      "coinType": 195,
+      "address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      "stored": "0x41a614f803b6fd780986a42c78ec9c7f77e6ded13c",
+      "roundTrip": true
+    },
+    {
+      "network": "solana",
+      "coinType": 501,
+      "address": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "stored": "0xce010e60afedb22717bd63192f54145a3f965a33bb82d2c7029eb2ce1e208264",
+      "roundTrip": true
+    },
+    {
+      "network": "solana",
+      "coinType": 501,
+      "address": "11111111111111111111111111111111",
+      "stored": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "roundTrip": true
+    }
+  ],
+  "invalidAddresses": [
+    {
+      "network": "bitcoin",
+      "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb",
+      "reason": "bad base58 checksum",
+      "valid": false
+    },
+    {
+      "network": "bitcoin",
+      "address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5",
+      "reason": "bad bech32 checksum",
+      "valid": false
+    },
+    {
+      "network": "bitcoin",
+      "address": "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx",
+      "reason": "testnet prefix on mainnet",
+      "valid": false
+    },
+    {
+      "network": "bitcoin",
+      "address": "bc1pw508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5sw4mq6",
+      "reason": "witness v1 must use bech32m",
+      "valid": false
+    },
+    {
+      "network": "litecoin",
+      "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+      "reason": "bitcoin address on litecoin",
+      "valid": false
+    },
+    {
+      "network": "ethereum",
+      "address": "0x1234",
+      "reason": "wrong length",
+      "valid": false
+    },
+    {
+      "network": "tron",
+      "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+      "reason": "bitcoin address on tron",
+      "valid": false
+    },
+    {
+      "network": "solana",
+      "address": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYBB",
+      "reason": "wrong length",
+      "valid": false
+    },
+    {
+      "network": "solana",
+      "address": "0OIl",
+      "reason": "invalid base58 alphabet",
+      "valid": false
+    }
+  ]
+}

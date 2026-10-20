@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "moduleResolution": "Bundler", "lib": ["ES2023", "DOM"],
+    "strict": true, "noEmit": true, "skipLibCheck": true, "allowImportingTsExtensions": true,
+    "types": ["node"], "resolveJsonModule": true, "noImplicitAny": false
+  },
+  "include": ["packages/**/*.ts", "server/**/*.ts", "scripts/*.ts", "test/*.ts"]
+}
