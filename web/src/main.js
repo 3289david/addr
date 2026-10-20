@@ -10,7 +10,7 @@ import { dev } from "./dev.js";
 import { enterprise } from "./enterprise.js";
 import { admin } from "./admin.js";
 
-const NAV = [["/", "Search"], ["/names", "My names"], ["/send", "Send"], ["/dev", "Developers"], ["/enterprise", "Enterprise"], ["/admin", "Admin"]];
+const NAV = [["/", "Search"], ["/names", "My names"], ["/send", "Send"], ["/dev", "Developers"], ["/enterprise", "Enterprise"]];
 const toggleTheme = initTheme();
 
 // pages that need an account. Everything else (search, send, profiles) stays open without signing in.
