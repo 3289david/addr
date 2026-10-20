@@ -111,6 +111,18 @@ console.log(await chain.resolve("heelo.addr", { network: "tron", asset: "USDT", 
 }
 
 async function account(body) {
+  const exp = btn("Download my data (JSON)", async () => {
+    const d = await api("GET", "/v1/account/export");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: "application/json" }));
+    a.download = "addr-account-export.json"; a.click(); URL.revokeObjectURL(a.href);
+  }, "ghost");
+  const confirmEmail = h("input", { placeholder: auth.user.email, autocomplete: "off", "aria-label": "Type your email to confirm" });
+  const del = btn("Delete my account", async () => {
+    if (!(await confirmDialog("Delete this account?", "Your API keys, webhooks, claimed namespaces and issued-name records are deleted and cannot be restored. Names on the blockchain are not affected.", "Delete account", true))) return;
+    await api("POST", "/v1/account/delete", { email: confirmEmail.value.trim() });
+    await loadAuth(); toast("Account deleted"); navigate("/", true);
+  }, "danger");
   const out = btn("Sign out everywhere", async () => {
     if (!(await confirmDialog("Sign out of all devices?", "Every active session for this account will end.", "Sign out all", true))) return;
     await api("POST", "/v1/auth/logout", { all: true });
@@ -118,6 +130,8 @@ async function account(body) {
   }, "danger");
   mount(body, h("div", { class: "card stack", style: "max-width:640px" }, h("h3", { style: "margin:0" }, "Account"),
     kv([["Email", auth.user.email], ["Account id", h("span", { class: "mono" }, auth.tenant?.id)], ["Plan", (auth.tenant?.plan || "free").toUpperCase()], ["Daily limit", Number(auth.tenant?.dailyLimit).toLocaleString()]], true),
-    h("div", { class: "help" }, "Sign-in uses one-time codes sent to your email. There is no password to leak."), h("div", null, out)));
+    h("div", { class: "help" }, "Sign-in uses one-time codes sent to your email. There is no password to leak."), h("div", null, out)),
+    h("div", { class: "card stack", style: "max-width:640px;margin-top:16px" }, h("h3", { style: "margin:0" }, "Your data"), h("p", { class: "muted", style: "margin:0" }, "Download everything we hold about this account, or delete the account. See the ", h("a", { href: "/legal/privacy" }, "Privacy Policy"), "."), h("div", null, exp),
+      h("div", { class: "divider", style: "margin:4px 0" }), field("Type your email to enable deletion", confirmEmail), h("div", null, del)));
 }
 void fmtTime;

@@ -25,7 +25,7 @@ export function loginView(next = "/dev", reason) {
         h("h1", { style: "font-size:28px;margin:0 0 6px;letter-spacing:-.02em" }, "Sign in or create an account"),
         h("p", { class: "muted", style: "margin:0" }, reason || "Enter your email. We send a one-time code. No password, and no account yet? One is created for you.")),
       field("Email", input), err, go,
-      h("div", { class: "help" }, "Open to everyone. We only use your email to sign you in."))));
+      h("div", { class: "help" }, "Open to everyone. We only use your email to sign you in. By continuing you agree to the ", h("a", { href: "/legal/terms" }, "Terms"), " and the ", h("a", { href: "/legal/privacy" }, "Privacy Policy"), "."))));
     setTimeout(() => input.focus(), 50);
   };
 

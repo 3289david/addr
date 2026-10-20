@@ -220,6 +220,18 @@ CREATE TABLE IF NOT EXISTS outbox (
 );
 CREATE INDEX IF NOT EXISTS outbox_due ON outbox(status, next_attempt);
 
+CREATE TABLE IF NOT EXISTS reports (
+  id TEXT PRIMARY KEY,
+  category TEXT NOT NULL,
+  name TEXT,
+  details TEXT NOT NULL,
+  contact TEXT,
+  status TEXT NOT NULL DEFAULT 'open',   -- open | reviewing | closed
+  note TEXT,
+  created INTEGER NOT NULL,
+  updated INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS rate_events (
   bucket TEXT NOT NULL,
   ts INTEGER NOT NULL

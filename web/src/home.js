@@ -3,39 +3,46 @@ import { h, mount, icon, btn, field, alert, api, coin, pill, statusPill, kv, ste
 import { wallet, contracts, requireWallet, isConnected, explorerTx } from "./wallet.js";
 import { NETWORKS } from "../../packages/core/src/index.ts";
 
-const EXAMPLES = ["heelo", "alice", "studio", "wallet1", "satoshi"];
+const EXAMPLES = ["heelo", "alice", "studio", "wallet1"];
 
 export async function home(root) {
   const input = h("input", { placeholder: "Search a name", autocomplete: "off", spellcheck: "false", autocapitalize: "off", "aria-label": "Name to search", maxlength: 63 });
   const results = h("div");
   const pricing = h("div");
+  const sec = (title, sub, body) => h("section", { class: "l-sec" }, h("header", null, h("h2", null, title), sub ? h("p", null, sub) : null), h("div", null, body));
   mount(root,
-    h("section", { class: "hero" },
-      h("div", { class: "eyebrow" }, icon("bolt", 15), "Open protocol for human-readable crypto addresses"),
-      h("h1", null, "Your name is your ", h("span", { class: "grad" }, "address.")),
-      h("p", { class: "lead" }, "One readable name for Bitcoin, Ethereum, Solana, TRON, Litecoin and USDT. Get yours free, send to names instead of 42 character strings, and let any app resolve them."),
-      h("div", { class: "searchbar" }, icon("search", 22), input, h("span", { class: "suffix" }, ".addr")),
-      h("div", { class: "suggest" }, h("span", { class: "faint", style: "padding:6px 0" }, "Try"), EXAMPLES.map((e) => h("button", { class: "chip", type: "button", onclick: () => { input.value = e; input.dispatchEvent(new Event("input")); } }, e))),
-      results),
-    h("section", { class: "stack lg" },
-      h("div", { class: "page-head center", style: "margin-top:40px" }, h("h2", { style: "margin:0 0 8px;font-size:30px" }, "One name, every chain"), h("p", { style: "margin:0 auto" }, "Pick the network and asset when you send. USDT and USDC always require an explicit network so funds never go to the wrong chain.")),
-      exampleBox(),
-      h("div", { class: "grid four" }, NETWORKS.map((n) => h("div", { class: "card tight hover" }, h("div", { class: "net-card" }, coin(n.id, true),
-        h("div", null, h("div", { style: "font-weight:650" }, n.name), h("div", { class: "muted", style: "font-size:13px" }, n.assets.map((a) => (a.standard === "native" ? a.symbol : `${a.symbol} ${a.standard}`)).join(", "))))))),
-      h("h2", { class: "center", style: "margin-top:56px" }, "How it works"),
-      h("div", { class: "howto" },
-        h("div", { class: "card" }, h("h3", null, "Claim a name"), h("p", { class: "muted" }, "Register in one transaction. Five or more characters are free for your first name; shorter names are priced by length.")),
-        h("div", { class: "card" }, h("h3", null, "Link your addresses"), h("p", { class: "muted" }, "Attach a deposit address for each network. Records are public, versioned and timestamped on-chain.")),
-        h("div", { class: "card" }, h("h3", null, "Get paid by name"), h("p", { class: "muted" }, "Share name.addr or a request link. Senders see network, asset and address together and are warned about changes."))),
-      h("div", { class: "grid", style: "margin-top:24px" },
-        feature("shield", "You hold the name", "Ownership lives in a contract. No admin can reassign a live name, and recovery is opt-in with a delay you control."),
-        feature("globe", "Built for integrations", "Free REST API, TypeScript SDK, React hook and a trustless on-chain resolver. Wallets can resolve without our servers."),
-        feature("lock", "Safer sending", "Look-alike detection, network mismatch checks, change history and a 24 hour change warning before every send."),
-        feature("layers", "Issue names to customers", "Platforms mint subnames like alice.wallet.addr with deposit addresses attached. Customers keep ownership.")),
-      h("h2", { class: "center", style: "margin-top:56px" }, "Simple pricing"), pricing,
-      h("div", { class: "card soft center", style: "margin-top:40px;padding:36px" },
-        h("h2", { style: "margin:0 0 8px" }, "Build with ADDR"), h("p", { class: "muted", style: "margin:0 auto 20px;max-width:520px" }, "Sign in with your email to get API keys, usage analytics and the enterprise issuing console."),
-        h("div", { class: "row", style: "justify-content:center" }, h("a", { class: "btn", href: "/dev" }, "Open developer console"), h("a", { class: "btn ghost", href: "/docs/", target: "_blank", rel: "noopener" }, "Read the specification")))));
+    h("section", { class: "l-hero" },
+      h("div", null,
+        h("h1", null, "Send to a name, not a 42-character address."),
+        h("p", { class: "lead" }, "A .addr name points to the Bitcoin, Ethereum, Solana, TRON and Litecoin addresses its owner chose. Names with five or more characters are free, one per wallet."),
+        h("div", { class: "searchbar" }, icon("search", 20), input, h("span", { class: "suffix" }, ".addr")),
+        h("div", { class: "suggest" }, h("span", { class: "faint", style: "padding:6px 0" }, "Try"), EXAMPLES.map((e) => h("button", { class: "chip", type: "button", onclick: () => { input.value = e; input.dispatchEvent(new Event("input")); } }, e))),
+        h("div", { class: "fine" }, "No signup needed to search or send. You only connect a wallet to register or change records.")),
+      demoCard()),
+    results,
+    sec("How it works", null, h("div", { class: "cols3" },
+      h("div", null, h("span", { class: "no" }, "01"), h("h3", null, "Register"), h("p", null, "One transaction from your wallet. You own the name from the first block; ADDR cannot reassign it.")),
+      h("div", null, h("span", { class: "no" }, "02"), h("h3", null, "Add addresses"), h("p", null, "Set a receiving address per network. Each change is public, timestamped and numbered.")),
+      h("div", null, h("span", { class: "no" }, "03"), h("h3", null, "Get paid by name"), h("p", null, "People type heelo.addr, pick the network and see the address before they confirm in their own wallet.")))),
+    sec("Networks", "USDT and USDC are never resolved without a network.", networkTable()),
+    sec("Checks before you send", null, h("ul", { class: "plain-list" },
+      h("li", null, h("b", null, "Look-alike names. "), "Search shows names that are visually close (paypa1 and paypal) next to the one you typed."),
+      h("li", null, h("b", null, "Recent changes. "), "If the address changed in the last 24 hours, or differs from the one you used before, you must tick a box to continue."),
+      h("li", null, h("b", null, "Network and token. "), "USDT on TRON is not USDT on Ethereum. The standard (TRC20, ERC20, SPL) is shown on every confirmation."),
+      h("li", null, h("b", null, "Expired names. "), "Expired names stop resolving, so money cannot be sent to an address nobody maintains."),
+      h("li", null, h("b", null, "What \"verified\" means. "), "The address is well-formed and read from the chain for an active name. It does not prove who the recipient is."))),
+    sec("For developers", "Free API. Wallets can also read the chain directly.", h("div", { class: "cols2" },
+      h("div", null, h("h3", null, "REST, SDK, CLI"), h("p", null, "Sign in with your email to get API keys and usage numbers. The TypeScript SDK also resolves straight from the contracts, with no ADDR server in the path."),
+        h("div", { class: "row", style: "margin-top:16px" }, h("a", { class: "btn", href: "/dev" }, "Developer console"), h("a", { class: "btn ghost", href: "/docs/", target: "_blank", rel: "noopener" }, "Specification"))),
+      h("pre", null, "GET /v1/names/heelo.addr/resolve\n      ?network=tron&asset=USDT&standard=TRC20\n\n{\n  \"address\": \"TR7NHqje...\",\n  \"tokenContract\": \"TR7NHqje...\",\n  \"verified\": true,\n  \"recentlyChanged\": false,\n  \"version\": 3\n}"))),
+    sec("Prices", "Read from the registrar contract.", pricing),
+    sec("Questions", null, h("div", null,
+      faq("Is it really free?", "Your first name of five or more characters costs nothing and renews for free. Shorter names, and extra names, are priced by length. You pay network fees for the transactions."),
+      faq("Who owns the name?", "The address that registered it, recorded in the registry contract. We cannot take or edit a live name. Prices and reserved words change only through a public timelock."),
+      faq("What if I lose my key?", "There is no automatic recovery. You can pre-set a guardian who can start a recovery that completes after a delay you choose, and that you can cancel while you still have your key."),
+      faq("Which wallets understand .addr?", "Not many yet. Resolution is open (API, SDK, contracts), but each wallet has to add it. Until then use the Send page or copy the resolved address."),
+      faq("Is my email public?", "No. Email is only used to sign in to the developer console. Names and address records are public on-chain, and registering needs no personal data."),
+      faq("Can I pay in Bitcoin or Solana?", "Registration is paid on the registry chain with ETH or stablecoins, or with BTC, LTC, SOL, TRX and others through an invoice, if the operator enabled that network."))));
 
   loadPricing(pricing);
   let timer, seq = 0;
@@ -43,27 +50,32 @@ export async function home(root) {
     clearTimeout(timer);
     const q = input.value.trim().toLowerCase().replace(/\.addr$/, "");
     if (!q) { mount(results); return; }
-    mount(results, h("div", { class: "card result-card" }, skeleton(3)));
+    mount(results, h("div", { class: "card", style: "margin-bottom:24px" }, skeleton(3)));
     timer = setTimeout(async () => {
       const my = ++seq;
       try {
         const r = await api("GET", `/v1/search?q=${encodeURIComponent(q)}${wallet.address ? `&owner=${wallet.address}` : ""}`);
         if (my === seq) mount(results, renderResult(r));
-      } catch (e) { if (my === seq) mount(results, h("div", { class: "result-card" }, alert("bad", e.message))); }
+      } catch (e) { if (my === seq) mount(results, alert("bad", e.message)); }
     }, 280);
   });
   input.focus();
 }
 
-function feature(ic, title, text) {
-  return h("div", { class: "card feature hover" }, h("div", { class: "ico" }, icon(ic, 22)), h("h3", { style: "margin:4px 0 0" }, title), h("p", null, text));
+function faq(q, a) { return h("details", { class: "q" }, h("summary", null, q), h("p", null, a)); }
+
+function demoCard() {
+  const rows = [["bitcoin", "Bitcoin", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"], ["ethereum", "Ethereum", "0xdAC17F958D2ee523a2206206994597C13D831ec7"], ["tron", "TRON", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"], ["solana", "Solana", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]];
+  return h("div", { class: "demo", "aria-label": "Example of a resolved name" },
+    h("div", { class: "demo-head" }, h("b", null, "heelo.addr"), h("span", null, "example record")),
+    rows.map(([id, label, a]) => h("div", { class: "demo-row" }, coin(id), h("span", { class: "n" }, label), h("span", { class: "a" }, a))),
+    h("div", { class: "demo-foot" }, "Each lookup reads these from the registry and resolver contracts."));
 }
 
-function exampleBox() {
-  const rows = [["bitcoin", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"], ["ethereum", "0xdAC17F958D2ee523a2206206994597C13D831ec7"], ["tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"], ["solana", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]];
-  return h("div", { class: "card example-box" },
-    h("div", { class: "row between", style: "margin-bottom:6px" }, h("div", { style: "font-size:22px;font-weight:750;letter-spacing:-.02em" }, "heelo.addr"), pill("example", "info")),
-    rows.map(([n, a]) => h("div", { class: "example-line" }, coin(n), h("div", { style: "min-width:92px;font-weight:600;text-transform:capitalize" }, n), h("div", { class: "a" }, a))));
+function networkTable() {
+  return h("div", { class: "table-wrap" }, h("table", null, h("thead", null, h("tr", null, ["Network", "Assets", "Address format"].map((x) => h("th", null, x)))),
+    h("tbody", null, NETWORKS.map((n) => h("tr", null, h("td", null, h("span", { class: "row tight" }, coin(n.id), n.name)), h("td", null, n.assets.map((a) => (a.standard === "native" ? a.symbol : `${a.symbol} ${a.standard}`)).join(", ")),
+      h("td", { class: "muted" }, { btc: "Base58 / Bech32 / Taproot", ltc: "Base58 / Bech32", evm: "EIP-55 checksum", tron: "Base58Check (T...)", solana: "Base58 public key" }[n.family]))))));
 }
 
 async function loadPricing(box) {
@@ -71,26 +83,25 @@ async function loadPricing(box) {
     const p = await api("GET", "/v1/pricing");
     const fmt = (n) => (n === 0 ? "Free" : `$${n}`);
     const t = p.tiers;
-    mount(box, h("div", { class: "grid two" },
-      h("div", { class: "card" }, h("h3", null, "Names"), h("div", { class: "table-wrap", style: "border:0" }, h("table", { class: "price-table" }, h("tbody", null,
-        h("tr", null, h("td", null, "5+ characters"), h("td", null, "First name free (1 per wallet)"), h("td", { class: "right" }, "renewals free")),
-        h("tr", null, h("td", null, "5+ extra names"), h("td", null, "per year"), h("td", { class: "right" }, fmt(t["5+ (additional)"].usdPerYear))),
-        h("tr", null, h("td", null, "4 characters"), h("td", null, "per year"), h("td", { class: "right" }, fmt(t["4"].usdPerYear))),
-        h("tr", null, h("td", null, "3 characters"), h("td", null, "per year"), h("td", { class: "right" }, fmt(t["3"].usdPerYear))),
-        h("tr", null, h("td", null, "2 characters"), h("td", null, "per year"), h("td", { class: "right" }, fmt(t["2"].usdPerYear))),
-        h("tr", null, h("td", null, "1 character"), h("td", null, "reserved for later"), h("td", { class: "right" }, t["1"].enabled ? fmt(t["1"].usdPerYear) : "Closed")))))),
-      h("div", { class: "card" }, h("h3", null, "Developer plans"), h("div", { class: "table-wrap", style: "border:0" }, h("table", { class: "price-table" }, h("tbody", null,
-        p.plans.map((pl) => h("tr", null, h("td", null, pl.name), h("td", null, pl.dailyRequests ? `${pl.dailyRequests.toLocaleString()} requests/day` : "Custom"), h("td", { class: "right" }, pl.priceKrwPerMonth ? `KRW ${pl.priceKrwPerMonth.toLocaleString()}/mo` : pl.id === "enterprise" ? "Contact" : "Free")))))))),
-      h("p", { class: "muted center", style: "margin-top:14px" }, "Pay in ETH or stablecoins on the registry chain, or in BTC, LTC, SOL, TRX and more from any wallet. Prices are read from the contract."));
-  } catch { mount(box, h("p", { class: "muted center" }, "Pricing unavailable.")); }
+    mount(box, h("div", { class: "cols2" },
+      h("div", { class: "table-wrap" }, h("table", { class: "price-table" }, h("thead", null, h("tr", null, h("th", null, "Name"), h("th", null, ""), h("th", { class: "right" }, "Per year"))), h("tbody", null,
+        h("tr", null, h("td", null, "5+ characters"), h("td", { class: "muted" }, "first name per wallet, renewals free"), h("td", { class: "right" }, "Free")),
+        h("tr", null, h("td", null, "5+ characters"), h("td", { class: "muted" }, "additional names"), h("td", { class: "right" }, fmt(t["5+ (additional)"].usdPerYear))),
+        h("tr", null, h("td", null, "4 characters"), h("td", null, ""), h("td", { class: "right" }, fmt(t["4"].usdPerYear))),
+        h("tr", null, h("td", null, "3 characters"), h("td", null, ""), h("td", { class: "right" }, fmt(t["3"].usdPerYear))),
+        h("tr", null, h("td", null, "2 characters"), h("td", null, ""), h("td", { class: "right" }, fmt(t["2"].usdPerYear))),
+        h("tr", null, h("td", null, "1 character"), h("td", { class: "muted" }, "not open"), h("td", { class: "right" }, t["1"].enabled ? fmt(t["1"].usdPerYear) : "-"))))),
+      h("div", { class: "table-wrap" }, h("table", { class: "price-table" }, h("thead", null, h("tr", null, h("th", null, "API plan"), h("th", null, "Requests"), h("th", { class: "right" }, "Per month"))), h("tbody", null,
+        p.plans.map((pl) => h("tr", null, h("td", null, pl.name), h("td", { class: "muted" }, pl.dailyRequests ? `${pl.dailyRequests.toLocaleString()} / day` : "negotiated"), h("td", { class: "right" }, pl.priceKrwPerMonth ? `KRW ${pl.priceKrwPerMonth.toLocaleString()}` : pl.id === "enterprise" ? "quote" : "Free"))))))));
+  } catch { mount(box, h("p", { class: "muted" }, "Pricing is unavailable right now.")); }
 }
 
 function renderResult(r) {
   if (!r.valid) {
-    return h("div", { class: "result-card" }, alert("warn", "Names use lowercase letters a-z, digits and single hyphens (not at the ends), 1 to 63 characters. No spaces or symbols."));
+    return h("div", { style: "margin-bottom:24px" }, alert("warn", "Names use lowercase letters a-z, digits and single hyphens (not at the ends), 1 to 63 characters. No spaces or symbols."));
   }
   const x = r.exact;
-  const card = h("div", { class: "card result-card" });
+  const card = h("div", { class: "card" });
   card.append(h("div", { class: "row between" },
     h("div", { style: "font-size:26px;font-weight:750;letter-spacing:-.02em;word-break:break-all" }, x.name), x.reserved ? pill("reserved", "warn", true) : statusPill(x.available ? "available" : x.status)));
   if (x.reserved) card.append(h("div", { style: "margin-top:14px" }, alert("warn", "This name is reserved by the protocol for system use.")));
@@ -112,7 +123,7 @@ function renderResult(r) {
   if (r.matches?.length > 1 || (r.matches?.length === 1 && r.matches[0].name !== x.name)) {
     wrap.append(h("div", { class: "card tight" }, h("h3", null, "Registered names starting with this"), h("div", { class: "row tight" }, r.matches.slice(0, 12).map((m) => h("a", { class: "chip", href: `/name/${m.name}` }, m.name)))));
   }
-  return h("div", { class: "result-card stack", style: "margin-top:26px" }, wrap);
+  return h("div", { class: "stack", style: "margin:8px 0 36px;max-width:820px" }, wrap);
 }
 
 function registerPanel(x) {
@@ -179,6 +190,7 @@ function registerPanel(x) {
   return h("div", { class: "stack" },
     h("div", { class: "row" }, h("div", { class: "grow" }, field("Duration", years)), h("div", { class: "grow", style: "flex:2" }, field("Payment", payment))),
     h("div", { class: "row" }, go, h("span", { class: "muted help" }, isConnected() ? `Owner: ${wallet.address}` : "You will be asked to connect a wallet. The name is owned by that address.")),
+    h("div", { class: "help" }, "By registering you accept the ", h("a", { href: "/legal/terms" }, "Terms"), " and ", h("a", { href: "/legal/refunds" }, "refund policy"), ". Registrations are recorded on a blockchain and cannot be reversed."),
     stepsBox, out);
 }
 void run; void copyLine;

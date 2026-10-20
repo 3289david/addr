@@ -33,9 +33,9 @@ const timingEq = (a: string, b: string) => {
 
 export function requestLogin(req: IncomingMessage, rawEmail: unknown, next?: string) {
   const email = normalizeEmail(rawEmail);
-  const ip = sha256(clientIp(req)).slice(0, 24);
+  const ip = sha256(clientIp(req) + "|" + new Date().toISOString().slice(0, 10)).slice(0, 24);
   rl(`login:email:${email}`, 5, 3600, "Too many sign-in emails for this address. Try again in an hour.");
-  rl(`login:ip:${ip}`, 20, 3600, "Too many sign-in attempts from this network. Try again later.");
+  rl(`login:ip:${ip}`, config.loginIpPerHour, 3600, "Too many sign-in attempts from this network. Try again later.");
   rl("login:global", 600, 3600, "Sign-in is busy. Try again shortly.");
 
   db.prepare("UPDATE login_codes SET consumed = 1 WHERE email = ? AND consumed = 0").run(email); // only the newest code works
@@ -111,7 +111,7 @@ export function verifyCode(req: IncomingMessage, res: ServerResponse, rawEmail: 
   const email = normalizeEmail(rawEmail);
   const code = String(rawCode ?? "").replace(/\s/g, "");
   if (!/^\d{6}$/.test(code)) throw new AddrError("invalid_code", "enter the 6 digit code from the email", 422);
-  rl(`verify:ip:${sha256(clientIp(req)).slice(0, 24)}`, 40, 3600, "Too many attempts. Try again later.");
+  rl(`verify:ip:${sha256(clientIp(req) + "|" + new Date().toISOString().slice(0, 10)).slice(0, 24)}`, 40, 3600, "Too many attempts. Try again later.");
   const row = db.prepare("SELECT * FROM login_codes WHERE email = ? AND consumed = 0 ORDER BY created DESC LIMIT 1").get(email) as any;
   if (!row || row.expires < now()) throw new AddrError("code_expired", "this code has expired or was already used; request a new one", 401);
   if (row.attempts >= 5) {
@@ -127,7 +127,7 @@ export function verifyCode(req: IncomingMessage, res: ServerResponse, rawEmail: 
 
 export function verifyToken(req: IncomingMessage, res: ServerResponse, token: unknown) {
   if (typeof token !== "string" || token.length < 20 || token.length > 100) throw new AddrError("invalid_token", "invalid sign-in link", 422);
-  rl(`verify:ip:${sha256(clientIp(req)).slice(0, 24)}`, 40, 3600, "Too many attempts. Try again later.");
+  rl(`verify:ip:${sha256(clientIp(req) + "|" + new Date().toISOString().slice(0, 10)).slice(0, 24)}`, 40, 3600, "Too many attempts. Try again later.");
   const row = db.prepare("SELECT * FROM login_codes WHERE token_hash = ? AND consumed = 0").get(sha256(token)) as any;
   if (!row || row.expires < now()) throw new AddrError("code_expired", "this sign-in link has expired or was already used", 401);
   return finish(req, res, row.id, row.email);
@@ -209,4 +209,64 @@ export function accountUsage(tenantId: string) {
     ? db.prepare(`SELECT day, SUM(count) AS requests, SUM(errors) AS errors FROM usage WHERE subject IN (${subjects.map(() => "?").join(",")}) GROUP BY day ORDER BY day DESC LIMIT 30`).all(...subjects)
     : [];
   return rows;
+}
+
+// ------------------------------------------------------------ data rights
+
+/** Everything the service holds about the signed-in account, as JSON. */
+export function exportAccount(userId: string) {
+  const u = db.prepare("SELECT id, email, tenant_id AS tenantId, created, last_login AS lastLogin FROM users WHERE id = ?").get(userId) as any;
+  if (!u) throw new AddrError("not_found", "account not found", 404);
+  const t = u.tenantId;
+  return {
+    exportedAt: now(),
+    user: u,
+    tenant: db.prepare("SELECT id, name, plan, plan_expires AS planExpires, created FROM tenants WHERE id = ?").get(t),
+    sessions: db.prepare("SELECT ua, created, last_seen AS lastSeen, expires FROM sessions WHERE user_id = ?").all(userId),
+    apiKeys: db.prepare("SELECT id, prefix, label, scopes, created, last_used AS lastUsed, revoked FROM api_keys WHERE tenant_id = ?").all(t),
+    webhooks: db.prepare("SELECT id, url, events, scope, active, created FROM webhooks WHERE tenant_id = ?").all(t),
+    namespaces: db.prepare("SELECT name, owner_wallet AS ownerWallet, verified_at AS verifiedAt FROM namespaces WHERE tenant_id = ?").all(t),
+    issuedNames: db.prepare("SELECT customer_id AS customerId, name, kind, owner, tx, status, created FROM issued WHERE tenant_id = ?").all(t),
+    invoices: db.prepare("SELECT id, kind, label, years, owner, plan, network, asset, standard, usd_micro AS usdMicro, amount, status, txid, created FROM invoices WHERE tenant_id = ?").all(t),
+    usage: accountUsage(t),
+    auditLog: db.prepare("SELECT ts, actor, action, target FROM audit WHERE tenant_id = ? ORDER BY ts DESC LIMIT 1000").all(t),
+    note: "On-chain data (names, records, transactions) is public and lives on the blockchain; it is not part of this export and cannot be erased by us.",
+  };
+}
+
+/**
+ * Deletes the account and the data tied to it. Invoices are kept without any link to the person (retained for accounting
+ * as required by law), and the audit trail is anonymised. Names on the blockchain are unaffected.
+ */
+export function deleteAccount(res: ServerResponse, userId: string, confirmEmail: unknown) {
+  const u = db.prepare("SELECT id, email, tenant_id FROM users WHERE id = ?").get(userId) as any;
+  if (!u) throw new AddrError("not_found", "account not found", 404);
+  if (normalizeEmail(confirmEmail) !== u.email) throw new AddrError("confirmation_mismatch", "type your account email to confirm deletion", 422);
+  const t = u.tenant_id;
+  const keyIds = (db.prepare("SELECT id FROM api_keys WHERE tenant_id = ?").all(t) as { id: string }[]).map((k) => k.id);
+  const run = (sql: string, ...args: any[]) => db.prepare(sql).run(...args);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    run("DELETE FROM sessions WHERE user_id = ?", userId);
+    run("DELETE FROM deliveries WHERE webhook_id IN (SELECT id FROM webhooks WHERE tenant_id = ?)", t);
+    run("DELETE FROM webhooks WHERE tenant_id = ?", t);
+    run("DELETE FROM namespaces WHERE tenant_id = ?", t);
+    run("DELETE FROM issued WHERE tenant_id = ?", t);
+    run("DELETE FROM idempotency WHERE tenant_id = ?", t);
+    for (const k of keyIds) run("DELETE FROM usage WHERE subject = ?", k);
+    run("DELETE FROM usage WHERE subject = ?", "u:" + userId);
+    run("DELETE FROM api_keys WHERE tenant_id = ?", t);
+    run("DELETE FROM login_codes WHERE email = ?", u.email);
+    run("DELETE FROM outbox WHERE to_addr = ?", u.email);
+    run("DELETE FROM users WHERE id = ?", userId);
+    run("UPDATE tenants SET name = 'deleted' WHERE id = ?", t);
+    run("UPDATE audit SET detail = NULL WHERE tenant_id = ?", t);
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+  audit(t, "user", "account.delete", userId);
+  setCookie(res, "", 0);
+  return { deleted: true };
 }

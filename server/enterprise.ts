@@ -213,7 +213,7 @@ export async function issueFreeVoucher(req: IncomingMessage, labelIn: string, ow
   const owner = getAddress(ownerIn);
   if ((await registrar.freeClaimed(owner)) as boolean) throw new AddrError("free_already_claimed", "this wallet already claimed its free name", 409);
   if (!((await registrar.available(label)) as boolean)) throw new AddrError("name_unavailable", `${label}.addr is not available`, 409);
-  rateCheck("freeclaim:ip:" + sha256(clientIp(req)).slice(0, 24), config.freeClaimsPerIpPerDay);
+  rateCheck("freeclaim:ip:" + sha256(clientIp(req) + "|" + new Date().toISOString().slice(0, 10)).slice(0, 24), config.freeClaimsPerIpPerDay);
   rateCheck("freeclaim:owner:" + owner, 5);
   const deadline = (await chainNow(true)) + 3600;
   const domain = { name: "AddrRegistrar", version: "1", chainId: config.chainId, verifyingContract: deployment.registrar };

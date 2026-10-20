@@ -56,6 +56,14 @@ node --no-warnings scripts/verify-live-parsers.ts   # BTC/TRON/Solana verifiers 
 5. Serve behind TLS. Build the web app without `--dev`: `npm run build:web`.
 6. Before mainnet: independent contract audit (not done), verify token contract addresses in `packages/core/src/chains.ts` against the issuers' official lists, and set realistic `MINCONF_*`.
 
+## Legal pages, privacy and data rights
+
+The site ships draft legal pages at `/legal/*`: Terms of Service, Privacy Policy (English and a Korean 개인정보 처리방침 following PIPA's required items), Acceptable Use, Payments and Refunds, Risk Disclosure, Name Policy, Cookies, and a public report form. They are templates: **have your counsel review them before launch** (Korean consumer law, e-commerce records, virtual-asset rules, and whether accepting crypto payments or issuing names triggers registration obligations in your situation).
+
+Fill in your details with environment variables (`LEGAL_ENTITY`, `LEGAL_EMAIL`, `LEGAL_PRIVACY_EMAIL`, `LEGAL_ADDRESS`, `LEGAL_REPRESENTATIVE`, `LEGAL_HOSTING`, `LEGAL_JURISDICTION`, `LEGAL_EFFECTIVE`). Until `LEGAL_ENTITY` and `LEGAL_EMAIL` are set, each page shows a warning that the operator is not configured.
+
+What the policies say is backed by code: a retention job (`server/retention.ts`, `config.retentionDays`) deletes login codes, rate-limit records, per-IP counters, old mail bodies (they contain one-time codes), expired sessions, webhook logs and closed reports on the published schedule; IP addresses are only used as day-salted hashes; users can download their data (`GET /v1/account/export`) and delete their account (`POST /v1/account/delete`); abuse and impersonation reports go to `POST /v1/reports` and an admin triage tab. The policy figures are served by `GET /v1/legal`.
+
 ## Email (self-hosted, no mail API)
 
 The server contains its own SMTP client, DKIM signer (RSA-SHA256, relaxed/relaxed) and a persistent retry queue. By default it looks up the recipient's MX records and delivers directly (STARTTLS when offered), the way a normal mail server does.

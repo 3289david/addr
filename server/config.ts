@@ -62,8 +62,21 @@ export const config = {
   },
   adminEmails: (e.ADMIN_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
   cookieSecure: e.COOKIE_SECURE === "1" || (e.PUBLIC_URL || "").startsWith("https://"),
+  loginIpPerHour: num("LOGIN_IP_PER_HOUR", 20),
   loginCodeTtlSec: num("LOGIN_CODE_TTL_SEC", 600),
   sessionTtlSec: num("SESSION_TTL_SEC", 30 * 86400),
+  legal: {
+    entity: e.LEGAL_ENTITY || "",
+    email: e.LEGAL_EMAIL || "",
+    hosting: e.LEGAL_HOSTING || "",
+    privacyEmail: e.LEGAL_PRIVACY_EMAIL || e.LEGAL_EMAIL || "",
+    address: e.LEGAL_ADDRESS || "",
+    representative: e.LEGAL_REPRESENTATIVE || "",
+    jurisdiction: e.LEGAL_JURISDICTION || "Republic of Korea",
+    effective: e.LEGAL_EFFECTIVE || "2026-10-20",
+  },
+  /** Days. The privacy policy quotes these numbers and the retention job enforces them. */
+  retentionDays: { loginCodes: 7, rateEvents: 2, sentMailBodies: 7, mailLog: 90, sessionsAfterExpiry: 30, ipUsage: 30, webhookDeliveries: 30, idempotency: 7, rpcHealth: 14, audit: 365, closedReports: 730 },
   // limits
   anonDailyLimit: num("ANON_DAILY_LIMIT", 2000),
   freeKeyDailyLimit: num("FREE_KEY_DAILY_LIMIT", 20000),

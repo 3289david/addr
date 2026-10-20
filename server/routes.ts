@@ -19,8 +19,9 @@ import {
 import { createInvoice, finalize, paymentMethods, publicInvoice, submitPayment, usdPrices } from "./payments.ts";
 import { assertSafeWebhookUrl, EVENT_TYPES, requeue } from "./webhooks.ts";
 import { indexOnce } from "./indexer.ts";
-import { accountUsage, createAccountKey, isAdminEmail, listKeys, logout, requestLogin, revokeKey, verifyCode, verifyToken } from "./accounts.ts";
+import { accountUsage, createAccountKey, deleteAccount, exportAccount, isAdminEmail, listKeys, logout, requestLogin, revokeKey, verifyCode, verifyToken } from "./accounts.ts";
 import { mailDnsStatus } from "./mail.ts";
+import { runRetention } from "./retention.ts";
 import type { Principal } from "./auth.ts";
 
 function needSession(p: Principal): string {
@@ -174,6 +175,9 @@ export function registerRoutes() {
     const t = needSession(c.principal);
     return { plan: c.principal.plan, dailyLimit: c.principal.dailyLimit, days: accountUsage(t) };
   });
+  route("GET", "/v1/account/export", (c) => { needSession(c.principal); return exportAccount(c.principal.session!.userId); });
+  route("POST", "/v1/account/delete", (c) => { needSession(c.principal); return deleteAccount(c.res, c.principal.session!.userId, c.body?.email); });
+  route("POST", "/v1/admin/retention/run", (c) => { requireAdmin(c.req, c.principal); return runRetention(); });
   route("GET", "/v1/admin/mail", async (c) => {
     requireAdmin(c.req, c.principal);
     const rows = db.prepare("SELECT id, to_addr AS \"to\", subject, status, attempts, last_error AS lastError, delivered_via AS via, created, sent_at AS sentAt FROM outbox ORDER BY created DESC LIMIT 50").all();
@@ -184,6 +188,44 @@ export function registerRoutes() {
     const keyId = c.principal.keyId;
     const rows = db.prepare("SELECT day, count, errors FROM usage WHERE subject = ? ORDER BY day DESC LIMIT 30").all(c.principal.subject);
     return { plan: c.principal.plan, dailyLimit: c.principal.dailyLimit, keyId: keyId ?? null, days: rows };
+  });
+
+  // ------------------------------------------------------------------ legal and reports
+  route("GET", "/v1/legal", () => ({
+    ...config.legal,
+    configured: Boolean(config.legal.entity && config.legal.email),
+    retentionDays: config.retentionDays,
+    cookies: ["addr_session (strictly necessary: keeps you signed in)"],
+  }));
+
+  route("POST", "/v1/reports", (c) => {
+    const ip = sha256(clientIp(c.req) + "|" + new Date().toISOString().slice(0, 10)).slice(0, 24);
+    const t = now();
+    const n = (db.prepare("SELECT COUNT(*) AS c FROM rate_events WHERE bucket = ? AND ts > ?").get("report:" + ip, t - 86400) as any).c;
+    if (n >= 5) throw new AddrError("rate_limited", "Too many reports from this network today.", 429);
+    db.prepare("INSERT INTO rate_events (bucket, ts) VALUES (?, ?)").run("report:" + ip, t);
+    const category = String(c.body?.category ?? "");
+    if (!["impersonation", "trademark", "scam", "illegal", "abuse", "other"].includes(category)) throw new AddrError("invalid_request", "choose a category", 422);
+    const details = str(c.body?.details, "details", 4000);
+    const name = c.body?.name ? normalizeName(String(c.body.name)) : null;
+    const contact = c.body?.contact ? String(c.body.contact).slice(0, 200) : null;
+    const id = "rep_" + crypto.randomBytes(6).toString("hex");
+    db.prepare("INSERT INTO reports (id, category, name, details, contact, created, updated) VALUES (?,?,?,?,?,?,?)").run(id, category, name, details, contact, t, t);
+    return created({ id, status: "open", note: "Report received. Names are not removed by ADDR: ownership lives in the registry contract. Reports are used to warn users and to inform the owner, and to act on API and website listings." });
+  });
+
+  route("GET", "/v1/admin/reports", (c) => {
+    requireAdmin(c.req, c.principal);
+    return { reports: db.prepare("SELECT * FROM reports ORDER BY created DESC LIMIT 200").all() };
+  });
+  route("PATCH", "/v1/admin/reports/:id", (c) => {
+    requireAdmin(c.req, c.principal);
+    const status = str(c.body?.status, "status");
+    if (!["open", "reviewing", "closed"].includes(status)) throw new AddrError("invalid_request", "bad status", 422);
+    const r = db.prepare("UPDATE reports SET status = ?, note = ?, updated = ? WHERE id = ?").run(status, c.body?.note ? String(c.body.note).slice(0, 2000) : null, now(), c.params.id);
+    if (!Number(r.changes)) throw new AddrError("not_found", "report not found", 404);
+    audit(null, "admin", "report." + status, c.params.id);
+    return { ok: true };
   });
 
   // ------------------------------------------------------------------ payments

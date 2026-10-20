@@ -9,6 +9,7 @@ import { invoice } from "./invoice.js";
 import { dev } from "./dev.js";
 import { enterprise } from "./enterprise.js";
 import { admin } from "./admin.js";
+import { legal } from "./legal.js";
 
 const NAV = [["/", "Search"], ["/names", "My names"], ["/send", "Send"], ["/dev", "Developers"], ["/enterprise", "Enterprise"]];
 const toggleTheme = initTheme();
@@ -25,6 +26,7 @@ const routes = [
   [/^\/dev\/?$/, (r) => dev(r)],
   [/^\/enterprise\/?$/, (r) => enterprise(r)],
   [/^\/admin\/?$/, (r) => admin(r)],
+  [/^\/legal\/([a-z-]+)\/?$/, (r, m) => legal(r, m[1])],
   [/^\/login\/?$/, (r) => mount(r, loginView(safeNext(query().next)))],
   [/^\/auth\/verify\/?$/, (r) => mount(r, verifyLinkView())],
 ];
@@ -39,8 +41,13 @@ function buildShell() {
   const themeBtn = h("button", { class: "icon-btn", "aria-label": "Toggle color theme", onclick: () => { const t = toggleTheme(); themeBtn.replaceChildren(icon(t === "light" ? "moon" : "sun", 18)); } }, icon(document.documentElement.dataset.theme === "light" ? "moon" : "sun", 18));
   const header = h("header", { class: "top" }, h("a", { class: "brand", href: "/" }, h("span", { class: "mark" }, "A"), h("span", { class: "word" }, "ADDR")), nav, h("div", { class: "top-actions" }, themeBtn, walletBox, acctBox, menu));
   const main = h("main", { id: "app", tabindex: "-1" });
-  const foot = h("footer", { class: "foot" }, h("div", { class: "foot-in" }, h("span", null, "ADDR protocol. Ownership and records are verified on-chain. A resolved name is not an endorsement of the recipient."),
-    h("nav", null, h("a", { href: "/docs/", target: "_blank", rel: "noopener" }, "Specification"), h("a", { href: "/openapi.json", target: "_blank", rel: "noopener" }, "OpenAPI"), h("a", { href: "/docs/integration-guide.md", target: "_blank", rel: "noopener" }, "Integration guide"))));
+  const col = (title, links) => h("div", null, h("h4", null, title), links.map(([href, label, ext]) => h("a", { href, target: ext ? "_blank" : null, rel: ext ? "noopener" : null }, label)));
+  const foot = h("footer", { class: "foot" }, h("div", { class: "foot-grid" },
+    h("div", null, h("a", { class: "brand", href: "/", style: "margin-bottom:12px" }, h("span", { class: "mark" }, "A"), h("span", { class: "word" }, "ADDR")), h("p", { class: "muted", style: "font-size:13.5px;max-width:300px;margin:0" }, "Readable names for crypto addresses. Records are public and verified on the chain you use.")),
+    col("Product", [["/", "Search names"], ["/send", "Send"], ["/names", "My names"], ["/dev", "Developers"], ["/enterprise", "Enterprise"]]),
+    col("Resources", [["/docs/", "Specification", true], ["/docs/integration-guide.md", "Integration guide", true], ["/openapi.json", "OpenAPI", true], ["/legal/report", "Report a name"]]),
+    col("Legal", [["/legal/terms", "Terms of Service"], ["/legal/privacy", "Privacy Policy"], ["/legal/privacy-ko", "개인정보 처리방침"], ["/legal/acceptable-use", "Acceptable Use"], ["/legal/refunds", "Payments and refunds"], ["/legal/risks", "Risk disclosure"], ["/legal/name-policy", "Name policy"], ["/legal/cookies", "Cookies"]])),
+    h("div", { class: "foot-base" }, h("span", null, "A resolved name is not an endorsement of the recipient. Always check the address before you send."), h("span", null, "\u00a9 ADDR")));
   mount($("#root"), header, main, foot);
   document.addEventListener("click", (e) => { if (!e.target.closest?.(".dropdown")) document.querySelectorAll(".dropdown-panel").forEach((p) => p.remove()); if (e.target.closest?.("#nav a")) nav.classList.remove("open"); });
   shell = { main, nav, walletBox, acctBox };
@@ -98,6 +105,7 @@ async function render() {
   const path = location.pathname.replace(/\/+$/, "") || "/";
   shell.nav.querySelectorAll("a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === path || (a.getAttribute("href") === "/" && path.startsWith("/name/"))));
   root.classList.toggle("wide", path === "/enterprise" || path === "/admin");
+  root.classList.toggle("landing", path === "/");
   document.title = path === "/" ? "ADDR - Your name is your address" : `${path.slice(1).split("/")[0].replace(/^./, (c) => c.toUpperCase())} - ADDR`;
   if (!auth.loaded) await loadAuth();
   if (PROTECTED[path] && !auth.user) { mount(root, loginView(path, PROTECTED[path])); return; }

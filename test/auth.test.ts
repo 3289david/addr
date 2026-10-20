@@ -72,7 +72,7 @@ before(async () => {
       ...process.env, PORT: String(PORT), DB_PATH: dbFile, ADMIN_TOKEN: ADMIN, INDEX_INTERVAL_MS: "2000",
       MAIL_TRANSPORT: "direct", MAIL_MX_OVERRIDE: `127.0.0.1:${sink.port}`, MAIL_FROM: "ADDR <login@addr.test>",
       DKIM_PRIVATE_KEY: dk.privateKey, DKIM_SELECTOR: "t1", PUBLIC_URL: "http://127.0.0.1:" + PORT,
-      ADMIN_EMAILS: "boss@example.test", OPERATOR_KEY: "", FREE_SIGNER_KEY: "",
+      ADMIN_EMAILS: "boss@example.test", LOGIN_IP_PER_HOUR: "500", OPERATOR_KEY: "", FREE_SIGNER_KEY: "",
     },
     stdio: ["ignore", "ignore", "inherit"],
   });
@@ -246,4 +246,72 @@ test("SPA serves client routes with dotted names and /dev", async () => {
     assert.equal(r.status, 200, p);
     assert.match(r.headers.get("content-type") || "", /text\/html/, p);
   }
+});
+
+test("legal info endpoint, abuse reports and admin triage", async () => {
+  const legal = await call("GET", "/v1/legal");
+  assert.equal(legal.status, 200);
+  assert.equal(legal.body.jurisdiction, "Republic of Korea");
+  assert.ok(legal.body.retentionDays.loginCodes > 0);
+  assert.equal(legal.body.configured, false); // no operator identity configured in the test server
+  assert.equal((await call("POST", "/v1/reports", { category: "nonsense", details: "x" })).status, 422);
+  assert.equal((await call("POST", "/v1/reports", { category: "scam", details: "" })).status, 422);
+  const r = await call("POST", "/v1/reports", { category: "impersonation", name: "paypa1.addr", details: "Pretends to be PayPal", contact: "me@example.test" });
+  assert.equal(r.status, 201);
+  assert.equal((await call("GET", "/v1/admin/reports")).status, 403);
+  const list = (await call("GET", "/v1/admin/reports", undefined, { authorization: `Bearer ${ADMIN}` })).body.reports;
+  assert.ok(list.find((x: any) => x.id === r.body.id && x.name === "paypa1.addr" && x.status === "open"));
+  assert.equal((await call("PATCH", `/v1/admin/reports/${r.body.id}`, { status: "closed", note: "warned owner" }, { authorization: `Bearer ${ADMIN}` })).status, 200);
+  for (let i = 0; i < 5; i++) await call("POST", "/v1/reports", { category: "other", details: "spam" });
+  assert.equal((await call("POST", "/v1/reports", { category: "other", details: "spam" })).status, 429);
+});
+
+test("account export and deletion (data rights)", async () => {
+  const email = `gone${crypto.randomBytes(3).toString("hex")}@example.test`;
+  const s = await signIn(email);
+  const h = { cookie: s.cookie, "x-csrf-token": s.csrf };
+  const key = await call("POST", "/v1/account/keys", { label: "k" }, h);
+  assert.equal(key.status, 201);
+  assert.equal((await call("GET", "/v1/account/export")).status, 401);
+  const exp = (await call("GET", "/v1/account/export", undefined, { cookie: s.cookie })).body;
+  assert.equal(exp.user.email, email);
+  assert.equal(exp.apiKeys.length, 1);
+  assert.ok(!JSON.stringify(exp).includes(key.body.apiKey), "export never contains the secret key");
+  // deletion needs the exact email
+  assert.equal((await call("POST", "/v1/account/delete", { email: "other@example.test" }, h)).status, 422);
+  assert.equal((await call("POST", "/v1/account/delete", {}, h)).status, 422);
+  const del = await call("POST", "/v1/account/delete", { email }, h);
+  assert.equal(del.status, 200);
+  assert.equal((await call("GET", "/v1/auth/me", undefined, { cookie: s.cookie })).body.authenticated, false);
+  assert.equal((await call("GET", "/v1/usage", undefined, { authorization: `Bearer ${key.body.apiKey}` })).status, 401, "keys die with the account");
+  const db = new DatabaseSync(dbFile);
+  assert.equal((db.prepare("SELECT COUNT(*) AS c FROM users WHERE email = ?").get(email) as any).c, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS c FROM login_codes WHERE email = ?").get(email) as any).c, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS c FROM outbox WHERE to_addr = ?").get(email) as any).c, 0);
+  db.close();
+  // the same email can sign up again as a brand new account
+  const again = await signIn(email);
+  assert.equal(again.v.body.newAccount, true);
+});
+
+test("retention job removes data past the published periods and blanks old mail bodies", async () => {
+  const db = new DatabaseSync(dbFile);
+  const old = Math.floor(Date.now() / 1000) - 400 * 86400;
+  db.prepare("INSERT INTO login_codes (id, email, code_hash, token_hash, created, expires) VALUES ('old1','o@example.test','h','t-old-1',?,?)").run(old, old + 600);
+  db.prepare("INSERT INTO rate_events (bucket, ts) VALUES ('login:ip:old', ?)").run(old);
+  db.prepare("INSERT INTO outbox (id, to_addr, subject, raw, status, attempts, next_attempt, created, sent_at) VALUES ('oldmail','o@example.test','s','SECRET BODY','sent',1,0,?,?)").run(old, old);
+  db.prepare("INSERT INTO usage (subject, day, count) VALUES ('ip:abc', '2020-01-01', 5)").run();
+  const fresh = Math.floor(Date.now() / 1000);
+  db.prepare("INSERT INTO rate_events (bucket, ts) VALUES ('login:ip:new', ?)").run(fresh);
+  const r = await call("POST", "/v1/admin/retention/run", {}, { authorization: `Bearer ${ADMIN}` });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.loginCodes >= 1 && r.body.rateEvents >= 1 && r.body.ipUsage >= 1);
+  assert.equal((db.prepare("SELECT COUNT(*) AS c FROM login_codes WHERE id = 'old1'").get() as any).c, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS c FROM outbox WHERE id = 'oldmail'").get() as any).c, 0); // older than the log period: gone
+  assert.equal((db.prepare("SELECT COUNT(*) AS c FROM rate_events WHERE bucket = 'login:ip:new'").get() as any).c, 1, "recent data is kept");
+  db.prepare("INSERT INTO outbox (id, to_addr, subject, raw, status, attempts, next_attempt, created, sent_at) VALUES ('mid','o@example.test','s','SECRET BODY','sent',1,0,?,?)").run(fresh - 20 * 86400, fresh - 20 * 86400);
+  await call("POST", "/v1/admin/retention/run", {}, { authorization: `Bearer ${ADMIN}` });
+  const mid = db.prepare("SELECT raw FROM outbox WHERE id = 'mid'").get() as any;
+  assert.equal(mid.raw, "", "bodies (which contain one-time codes) are blanked after the body period");
+  db.close();
 });

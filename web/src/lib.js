@@ -214,14 +214,16 @@ export function qr(text, size) {
 
 // -------------------------------------------------------------- formatting
 export const short = (a, n = 6) => (a && a.length > 2 * n + 3 ? a.slice(0, n + 2) + "…" + a.slice(-n) : a);
-export const fmtTime = (ts) => (ts ? new Date(ts * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "-");
-export const fmtDate = (ts) => (ts ? new Date(ts * 1000).toLocaleDateString(undefined, { dateStyle: "medium" }) : "-");
+export const fmtTime = (ts) => (Number(ts) > 0 ? new Date(ts * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "-");
+export const fmtDate = (ts) => (Number(ts) > 0 ? new Date(ts * 1000).toLocaleDateString(undefined, { dateStyle: "medium" }) : "-");
 export function timeAgo(ts) {
+  if (!(Number(ts) > 0)) return "-";
   const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
   if (s < 60) return "just now"; if (s < 3600) return `${Math.floor(s / 60)} min ago`;
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`; return `${Math.floor(s / 86400)} d ago`;
 }
-export function daysLeft(ts) { const d = Math.ceil((ts - Date.now() / 1000) / 86400); return d > 0 ? `${d} days left` : "expired"; }
+export function daysLeft(ts) {
+  if (!(Number(ts) > 0)) return "-"; const d = Math.ceil((ts - Date.now() / 1000) / 86400); return d > 0 ? `${d} days left` : "expired"; }
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --------------------------------------------------------------- storage

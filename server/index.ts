@@ -5,6 +5,7 @@ import { startIndexer } from "./indexer.ts";
 import { startWebhookWorker } from "./webhooks.ts";
 import { startPaymentsWorker } from "./payments.ts";
 import { startMailWorker } from "./mail.ts";
+import { startRetention } from "./retention.ts";
 import { deployment, operatorAddress } from "./chain.ts";
 
 registerRoutes();
@@ -19,5 +20,6 @@ startIndexer();
 startWebhookWorker();
 startPaymentsWorker();
 startMailWorker();
+startRetention();
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => server.close(() => process.exit(0)));
