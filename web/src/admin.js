@@ -1,4 +1,11 @@
-import { h, mount, icon, btn, field, alert, api, pill, statusPill, tabs, table, skeleton, empty, fmtTime, timeAgo, short, toast, navigate, query, auth } from "./lib.js";
+import { h, mount, icon, btn, field, alert, api, pill, statusPill, tabs, table, skeleton, empty, fmtTime, timeAgo, short, toast, navigate, query, auth, copyLine, kv } from "./lib.js";
+
+// Base mainnet deployment in progress — not read from any API since the contracts aren't live yet.
+// Remove this block once the deployment is finished and addr.krl.kr is actually pointed at Base.
+const BASE_DEPLOY = {
+  adminMultisig: "0x08af8bc9d5b7f1DD0469c3A68DD40a26a05efb34", // your Safe on Base: admin + treasury
+  deployer: "0x3F50d09906ddd2f6c14eA3594355AB79D169701b", // throwaway, single-use deploy key — needs ~0.02 ETH on Base for gas
+};
 
 let tokenValue = ""; // optional static admin token, kept in memory only
 
@@ -28,8 +35,16 @@ async function stats(body) {
 
 async function infra(body) {
   const h2 = await call("GET", "/v1/admin/health");
-  mount(body, h("div", { class: "stack" }, h("h3", { style: "margin:0" }, "RPC providers"), table(["Endpoint", "Status", "Latency", "Block", "Last hour OK / total"], h2.live.map((r) => { const s = h2.lastHour.find((x) => x.url === r.url);
-    return h("tr", null, h("td", { class: "mono" }, r.url), h("td", null, pill(r.ok ? "up" : r.error || "down", r.ok ? "ok" : "bad", true)), h("td", null, `${r.ms} ms`), h("td", null, r.block ?? "-"), h("td", null, s ? `${s.ok} / ${s.n}` : "-")); }))));
+  mount(body, h("div", { class: "stack lg" },
+    h("div", { class: "card stack" },
+      h("div", { class: "row between" }, h("h3", { style: "margin:0" }, "Base mainnet deployment"), pill("in progress", "warn", true)),
+      h("p", { class: "muted", style: "margin:0" }, "Deploying the registry/resolver/registrar/timelock contracts to Base. These two addresses aren't live contract addresses yet — just the accounts involved in getting there."),
+      kv([
+        ["Admin + treasury (your Safe)", h("div", { class: "stack", style: "gap:6px" }, copyLine(BASE_DEPLOY.adminMultisig), h("a", { href: `https://basescan.org/address/${BASE_DEPLOY.adminMultisig}`, target: "_blank", rel: "noopener", class: "help" }, "View on Basescan"))],
+        ["Deployer (throwaway, gas only)", h("div", { class: "stack", style: "gap:6px" }, copyLine(BASE_DEPLOY.deployer), h("a", { href: `https://basescan.org/address/${BASE_DEPLOY.deployer}`, target: "_blank", rel: "noopener", class: "help" }, "View on Basescan"))],
+      ])),
+    h("div", { class: "stack" }, h("h3", { style: "margin:0" }, "RPC providers"), table(["Endpoint", "Status", "Latency", "Block", "Last hour OK / total"], h2.live.map((r) => { const s = h2.lastHour.find((x) => x.url === r.url);
+      return h("tr", null, h("td", { class: "mono" }, r.url), h("td", null, pill(r.ok ? "up" : r.error || "down", r.ok ? "ok" : "bad", true)), h("td", null, `${r.ms} ms`), h("td", null, r.block ?? "-"), h("td", null, s ? `${s.ok} / ${s.n}` : "-")); })))));
 }
 
 async function timelock(body) {
