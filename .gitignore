@@ -5,4 +5,5 @@ data/
 .env
 *.log
 web/dist/
+walletapp/dist/
 deployments/

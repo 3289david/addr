@@ -6,3 +6,4 @@ export * from "./pricing.ts";
 export * from "./similarity.ts";
 export * from "./uri.ts";
 export * from "./abi.ts";
+export * from "./wallet-client.ts";

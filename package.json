@@ -13,6 +13,7 @@
     "deploy:local": "hardhat run scripts/deploy.cjs --network localhost",
     "build:abi": "node scripts/build-abi.cjs",
     "build:web": "node scripts/build-web.cjs",
+    "build:walletapp": "node scripts/build-walletapp.cjs",
     "build:web:dev": "node scripts/build-web.cjs --dev",
     "start": "tsx --no-warnings server/index.ts",
     "cli": "tsx --no-warnings packages/cli/addr.ts",
