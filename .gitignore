@@ -6,4 +6,7 @@ data/
 *.log
 web/dist/
 walletapp/dist/
+extension/dist/
+android-apk/
+android-sdk/
 deployments/
