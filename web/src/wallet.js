@@ -72,11 +72,15 @@ export async function connectWalletConnect() {
   if (!WC_PROJECT_ID) throw new Error("Mobile wallet connection is not configured on this deployment.");
   const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
   const info = await loadChain();
-  const required = COMMON_CHAINS.includes(1) ? 1 : COMMON_CHAINS[0];
-  const optional = [...new Set([info.chain.id, ...COMMON_CHAINS])].filter((id) => id !== required);
+  // No `chains` (required namespace) on purpose: when it's set, the library sets this.chainId from OUR
+  // hardcoded pick regardless of what the wallet actually approved, then setAccounts() filters the
+  // wallet's real approved accounts down to only that chainId — wiping out every account whenever the
+  // connecting wallet's accounts aren't tagged for exactly that chain. With chains empty and everything
+  // in optionalChains, the library falls back to deriving chainId from the accounts the wallet actually
+  // returned, so nothing gets filtered out. ChainsProps' type requires optionalChains be non-empty instead.
+  const optional = [...new Set([info.chain.id, ...COMMON_CHAINS])];
   const provider = await EthereumProvider.init({
     projectId: WC_PROJECT_ID,
-    chains: [required],
     optionalChains: optional,
     rpcMap: { [info.chain.id]: info.chain.rpcUrl },
     showQrModal: true,
@@ -97,7 +101,19 @@ export async function connectWalletConnect() {
       throw /rejected|reset/i.test(e.message || "") ? CANCEL() : e;
     }
   }
-  const accounts = provider.accounts;
+  let accounts = provider.accounts;
+  if (!accounts?.length) {
+    // Defense in depth: provider.connect()'s source has a further edge case (an internal `if (!n) return`)
+    // where it can resolve successfully without setting anything. Read the real approved session directly,
+    // bypassing the library's own (chain-filtered) accounts entirely.
+    const raw = provider.session?.namespaces?.eip155?.accounts || [];
+    if (raw.length) {
+      const chainIdStr = raw[0].split(":")[1];
+      provider.chainId = Number(chainIdStr);
+      provider.accounts = raw.filter((a) => a.startsWith(`eip155:${chainIdStr}:`)).map((a) => a.split(":")[2]);
+      accounts = provider.accounts;
+    }
+  }
   if (!accounts?.length) throw new Error("The wallet connected but didn't share an account — please try again and approve the account/network prompt in your wallet app.");
   wcProvider = provider;
   wallet.raw = provider;
