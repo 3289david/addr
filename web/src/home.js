@@ -92,7 +92,7 @@ async function loadPricing(box) {
         h("tr", null, h("td", null, "2 characters"), h("td", null, ""), h("td", { class: "right" }, fmt(t["2"].usdPerYear))),
         h("tr", null, h("td", null, "1 character"), h("td", { class: "muted" }, "not open"), h("td", { class: "right" }, t["1"].enabled ? fmt(t["1"].usdPerYear) : "-"))))),
       h("div", { class: "table-wrap" }, h("table", { class: "price-table" }, h("thead", null, h("tr", null, h("th", null, "API plan"), h("th", null, "Requests"), h("th", { class: "right" }, "Per month"))), h("tbody", null,
-        p.plans.map((pl) => h("tr", null, h("td", null, pl.name), h("td", { class: "muted" }, pl.dailyRequests ? `${pl.dailyRequests.toLocaleString()} / day` : "negotiated"), h("td", { class: "right" }, pl.priceKrwPerMonth ? `KRW ${pl.priceKrwPerMonth.toLocaleString()}` : pl.id === "enterprise" ? "quote" : "Free"))))))));
+        p.plans.map((pl) => h("tr", null, h("td", null, pl.name), h("td", { class: "muted" }, pl.dailyRequests ? `${pl.dailyRequests.toLocaleString()} / day` : "negotiated"), h("td", { class: "right" }, pl.priceUsdPerMonth ? `$${pl.priceUsdPerMonth.toLocaleString()}` : pl.id === "enterprise" ? "quote" : "Free"))))))));
   } catch { mount(box, h("p", { class: "muted" }, "Pricing is unavailable right now.")); }
 }
 

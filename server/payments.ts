@@ -99,8 +99,8 @@ export async function createInvoice(p: CreateInvoice) {
   let label: string | undefined;
   if (p.kind === "plan") {
     const plan = config.plans[p.plan ?? ""];
-    if (!plan || plan.priceKrw <= 0) throw new AddrError("invalid_plan", "plan is not purchasable (free or contact sales)", 422);
-    usdMicro = BigInt(Math.ceil((plan.priceKrw / config.krwPerUsd) * 1e6));
+    if (!plan || plan.priceUsd <= 0) throw new AddrError("invalid_plan", "plan is not purchasable (free or contact sales)", 422);
+    usdMicro = BigInt(plan.priceUsd) * 1_000_000n;
     years = 1;
   } else {
     if (!Number.isInteger(years) || years < 1 || years > 5) throw new AddrError("invalid_years", "years must be 1..5", 422);

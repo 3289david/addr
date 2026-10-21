@@ -80,7 +80,7 @@ export function registerRoutes() {
       currency: "USD", unit: "per year", source: "on-chain registrar", tiers, defaults: DEFAULT_TIERS,
       freeTier: "1 name of 5+ characters per wallet, renewals free",
       maxYears: 5, gracePeriodDays: 30,
-      plans: Object.entries(config.plans).map(([id, p]) => ({ id, name: p.name, priceKrwPerMonth: p.priceKrw, dailyRequests: p.dailyLimit < 1e11 ? p.dailyLimit : null, maxSubnames: p.maxSubnames < 1e11 ? p.maxSubnames : null })),
+      plans: Object.entries(config.plans).map(([id, p]) => ({ id, name: p.name, priceUsdPerMonth: p.priceUsd, dailyRequests: p.dailyLimit < 1e11 ? p.dailyLimit : null, maxSubnames: p.maxSubnames < 1e11 ? p.maxSubnames : null })),
       acceptedPaymentMethods: paymentMethods(),
       onchainTokens: deployment.tokens,
     };

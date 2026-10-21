@@ -125,10 +125,10 @@ async function billing(body) {
       const cur = p.id === d.plan;
       const sel = h("select", { "aria-label": "Pay with" }, methods.map((m, i) => h("option", { value: i }, `${m.asset}${m.standard !== "native" ? " " + m.standard : ""} on ${m.networkName}`)));
       return h("div", { class: "card stack" + (cur ? " soft" : ""), style: cur ? "outline:2px solid var(--accent)" : "" }, h("div", { class: "row between" }, h("h3", { style: "margin:0" }, p.name), cur ? pill("current", "ok", true) : null),
-        h("div", { class: "price-big", style: "font-size:24px" }, p.priceKrwPerMonth ? `KRW ${p.priceKrwPerMonth.toLocaleString()}` : p.id === "enterprise" ? "Custom" : "Free", p.priceKrwPerMonth ? h("span", { class: "muted", style: "font-size:14px;font-weight:500" }, " / month") : null),
+        h("div", { class: "price-big", style: "font-size:24px" }, p.priceUsdPerMonth ? `$${p.priceUsdPerMonth.toLocaleString()}` : p.id === "enterprise" ? "Custom" : "Free", p.priceUsdPerMonth ? h("span", { class: "muted", style: "font-size:14px;font-weight:500" }, " / month") : null),
         h("div", { class: "muted", style: "font-size:13.5px" }, p.dailyRequests ? `${p.dailyRequests.toLocaleString()} requests per day` : "Negotiated limits", h("br"), p.maxSubnames ? `${p.maxSubnames.toLocaleString()} issued names` : "Unlimited issuing"),
-        p.priceKrwPerMonth && methods.length ? h("div", { class: "stack" }, sel, btn("Pay for 30 days", async () => { const m = methods[Number(sel.value)]; const i = await api("POST", "/v1/enterprise/plan", { plan: p.id, network: m.network, asset: m.asset, standard: m.standard }); navigate(`/invoice/${i.id}`); }, "small"))
-          : p.priceKrwPerMonth ? h("div", { class: "help" }, "No payment network is enabled on this deployment.") : null);
+        p.priceUsdPerMonth && methods.length ? h("div", { class: "stack" }, sel, btn("Pay for 30 days", async () => { const m = methods[Number(sel.value)]; const i = await api("POST", "/v1/enterprise/plan", { plan: p.id, network: m.network, asset: m.asset, standard: m.standard }); navigate(`/invoice/${i.id}`); }, "small"))
+          : p.priceUsdPerMonth ? h("div", { class: "help" }, "No payment network is enabled on this deployment.") : null);
     })),
     h("div", null, h("h2", { style: "margin-top:0" }, "Invoices"), inv.invoices.length ? table(["Id", "For", "Amount", "Status", "Created"], inv.invoices.map((i) => h("tr", null, h("td", null, h("a", { href: `/invoice/${i.id}`, class: "mono" }, short(i.id, 5))), h("td", null, i.name || i.plan || i.kind), h("td", null, `${i.amount} ${i.asset}`), h("td", null, statusPill(i.status)), h("td", { class: "nowrap" }, timeAgo(i.createdAt))))) : empty("list", "No invoices", "Plan and name payments are listed here."))));
 }

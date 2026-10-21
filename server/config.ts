@@ -83,7 +83,6 @@ export const config = {
   freeClaimsPerIpPerDay: num("FREE_CLAIMS_PER_IP_PER_DAY", 3),
   allowInsecureWebhooks: e.ALLOW_INSECURE_WEBHOOKS === "1",
   // payments
-  krwPerUsd: num("KRW_PER_USD", 1400),
   quoteTtlSec: num("QUOTE_TTL_SEC", 1800),
   priceApi: e.PRICE_API || "https://api.coingecko.com/api/v3/simple/price",
   btcApi: e.BTC_API || "https://mempool.space/api",
@@ -111,11 +110,11 @@ export const config = {
       .map(([k, v]) => [k.slice(8).toLowerCase(), v as string]),
   ) as Record<string, string>,
   plans: {
-    free: { name: "FREE", priceKrw: 0, dailyLimit: num("FREE_KEY_DAILY_LIMIT", 20000), maxSubnames: 0, webhooks: 0, batch: 10 },
-    startup: { name: "STARTUP", priceKrw: 49000, dailyLimit: 200000, maxSubnames: 1000, webhooks: 5, batch: 50 },
-    business: { name: "BUSINESS", priceKrw: 199000, dailyLimit: 2000000, maxSubnames: 1_000_000, webhooks: 50, batch: 100 },
-    enterprise: { name: "ENTERPRISE", priceKrw: 0, dailyLimit: 1e12, maxSubnames: 1e12, webhooks: 1000, batch: 100 },
-  } as Record<string, { name: string; priceKrw: number; dailyLimit: number; maxSubnames: number; webhooks: number; batch: number }>,
+    free: { name: "FREE", priceUsd: 0, dailyLimit: num("FREE_KEY_DAILY_LIMIT", 20000), maxSubnames: 0, webhooks: 0, batch: 10 },
+    startup: { name: "STARTUP", priceUsd: 35, dailyLimit: 200000, maxSubnames: 1000, webhooks: 5, batch: 50 },
+    business: { name: "BUSINESS", priceUsd: 142, dailyLimit: 2000000, maxSubnames: 1_000_000, webhooks: 50, batch: 100 },
+    enterprise: { name: "ENTERPRISE", priceUsd: 0, dailyLimit: 1e12, maxSubnames: 1e12, webhooks: 1000, batch: 100 },
+  } as Record<string, { name: string; priceUsd: number; dailyLimit: number; maxSubnames: number; webhooks: number; batch: number }>,
 };
 
 export function requireDeployment(): Deployment {
