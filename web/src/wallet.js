@@ -3,8 +3,12 @@
 // transaction is shown as copyable fields, the user sends it from any wallet and pastes the hash; we confirm
 // it on-chain. Once connected, the choice is remembered (`walletPref`) and silently resumed on later visits
 // via autoConnect() — never by prompting again, only by reusing permission the wallet already granted.
-import { AbstractSigner, BrowserProvider, Contract, JsonRpcProvider, getAddress, isAddress, verifyMessage } from "ethers";
-import { registryAbi, resolverAbi, registrarAbi, erc20Abi } from "../../packages/core/src/index.ts";
+import { AbstractSigner, BrowserProvider, Contract, JsonRpcProvider, getAddress, getBytes, isAddress, verifyMessage } from "ethers";
+import {
+  registryAbi, resolverAbi, registrarAbi, erc20Abi,
+  NETWORKS, UNSUPPORTED_NETWORKS, namehash, normalizeName, parentName, decodeAddress, validateAddress,
+  getNetwork, getAsset, isMultiNetworkAsset, explorerAddressUrl,
+} from "../../packages/core/src/index.ts";
 import { h, mount, modal, btn, icon, copy, copyLine, qr, alert, field, kv, loadChain, store, toast, sleep, short } from "./lib.js";
 
 // Baked in at build time from .env (WALLETCONNECT_PROJECT_ID) by scripts/build-web.cjs. Public by design:
@@ -363,6 +367,93 @@ export async function contracts(write = true) {
 }
 
 export function explorerTx(info, hash) { return info.chain.explorer ? `${info.chain.explorer}/tx/${hash}` : null; }
+
+// ---------------------------------------------------------- on-chain resolution (no API, no SDK)
+// Mirrors server/resolve.ts exactly, but reads straight from the registry/resolver contracts over a
+// public RPC. The ADDR backend is a convenience layer (search index, rate limiting, nicer errors) — it
+// is never required to resolve a name or send to it. Anyone with just the registry/resolver addresses
+// (public: shown on /admin and in packages/core) and any RPC node for this chain can do the same thing
+// this function does, with no API key and no SDK installed.
+const RECENT_CHANGE_SECS = 24 * 3600;
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+
+async function nameInfoOnChain(input) {
+  const { registry, resolver } = await contracts(false);
+  const name = normalizeName(input);
+  const node = namehash(name);
+  const parent = parentName(name);
+  const [statusN, activeOwner, rawOwner, res] = await Promise.all([
+    registry.statusOf(node), registry.ownerOf(node), registry.rawOwner(node), registry.resolverOf(node),
+  ]);
+  let status;
+  switch (Number(statusN)) {
+    case 1: status = "active"; break;
+    case 2: status = "grace"; break;
+    case 3: status = rawOwner === ZERO_ADDR ? "available" : "expired"; break;
+    default: status = "available";
+  }
+  return {
+    name, node, status, parent,
+    owner: status === "active" ? activeOwner : status === "grace" ? rawOwner : null,
+    resolverAddr: status === "active" && res !== ZERO_ADDR ? res : null,
+    resolver,
+  };
+}
+
+async function readRecordOnChain(resolver, node, coinType) {
+  const [raw, meta] = await Promise.all([resolver["addr(bytes32,uint256)"](node, coinType), resolver.addrMeta(node, coinType)]);
+  return { raw, updatedAt: Number(meta[0]), block: Number(meta[1]), version: Number(meta[2]) };
+}
+
+/** Resolves a .addr name directly from the chain. Same shape/behavior as GET /v1/names/:name/resolve,
+ *  so it is a drop-in replacement wherever that API call was used. */
+export async function resolveOnChain(input, networkId, assetSym, standard) {
+  const asset0 = assetSym?.toUpperCase();
+  if (!networkId) {
+    if (asset0 && isMultiNetworkAsset(asset0)) throw new Error(`${asset0} exists on several networks; specify network (and standard) explicitly`);
+    if (!asset0) throw new Error("network is required");
+    const hit = NETWORKS.find((n) => n.nativeSymbol === asset0 && n.family !== "evm") ?? (asset0 === "ETH" ? getNetwork("ethereum") : undefined);
+    if (!hit) throw new Error("network is required");
+    networkId = hit.id;
+  }
+  networkId = networkId.toLowerCase();
+  if (UNSUPPORTED_NETWORKS.includes(networkId)) throw new Error(`${networkId} is not supported yet`);
+  const net = getNetwork(networkId);
+  if (!net) throw new Error(`unknown network "${networkId}"`);
+  const asset = assetSym ? getAsset(net, assetSym, standard) : net.assets[0];
+  if (!asset) throw new Error(`${assetSym?.toUpperCase() ?? ""}${standard ? ` (${standard})` : ""} is not supported on ${net.name}. Supported: ${net.assets.map((x) => `${x.symbol}/${x.standard}`).join(", ")}`);
+
+  const info = await nameInfoOnChain(input);
+  if (info.status === "available") throw new Error(`${info.name} is not registered`);
+  if (info.status !== "active") throw new Error(`${info.name} is ${info.status}; resolution and sending are blocked until it is renewed`);
+
+  let rec = await readRecordOnChain(info.resolver, info.node, net.coinType);
+  let source = "record";
+  let fallbackWarning;
+  if (rec.raw === "0x" && net.family === "evm" && net.coinType !== 60) {
+    const eth = await readRecordOnChain(info.resolver, info.node, 60);
+    if (eth.raw !== "0x") {
+      rec = eth; source = "fallback-ethereum";
+      fallbackWarning = `No ${net.name}-specific address is set; showing the Ethereum address. Smart-contract wallets may not control this address on ${net.name}. Confirm with the recipient before sending.`;
+    }
+  }
+  if (rec.raw === "0x") throw new Error(`${info.name} has no ${net.name} address record`);
+  let address;
+  try { address = decodeAddress(net, getBytes(rec.raw)); }
+  catch (e) { throw new Error(`stored record failed validation: ${e.message}`); }
+  const check = validateAddress(net.id, address);
+  if (!check.valid) throw new Error(`stored record failed validation: ${check.error}`);
+
+  const nowSecs = Math.floor(Date.now() / 1000);
+  return {
+    name: info.name, node: info.node, network: net.id, networkName: net.name, coinType: net.coinType,
+    asset: asset.symbol, standard: asset.standard, tokenContract: asset.contract,
+    address, verified: true, addressFormat: check.format, source, fallbackWarning,
+    updatedAt: rec.updatedAt || null, updatedBlock: rec.block || null, version: rec.version,
+    recentlyChanged: rec.updatedAt > 0 && nowSecs - rec.updatedAt < RECENT_CHANGE_SECS,
+    explorer: explorerAddressUrl(net, address),
+  };
+}
 
 /** Plain transfer on an arbitrary EVM chain for the Send page. */
 export async function sendEvmTransfer({ chainId, chainName, to, valueWei = 0n, data = "0x", summary }) {

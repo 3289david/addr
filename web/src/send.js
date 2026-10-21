@@ -1,5 +1,5 @@
 import { h, mount, icon, btn, field, alert, api, coin, pill, kv, tabs, qr, copy, copyLine, empty, fmtTime, timeAgo, short, store, toast, navigate, query, confirmDialog } from "./lib.js";
-import { wallet, requireWallet, isConnected, sendEvmTransfer } from "./wallet.js";
+import { wallet, requireWallet, isConnected, sendEvmTransfer, resolveOnChain } from "./wallet.js";
 import { NETWORKS, getNetwork, paymentUri, parseUnits, explorerTxUrl, isMultiNetworkAsset } from "../../packages/core/src/index.ts";
 import { ethers } from "ethers";
 
@@ -47,7 +47,9 @@ function sendForm(q) {
     if (!/\.addr$/.test(name)) throw new Error("Enter a full name ending in .addr");
     const { network, symbol, standard } = sel.get();
     try {
-      const r = await api("GET", `/v1/names/${encodeURIComponent(name)}/resolve?${new URLSearchParams({ network, asset: symbol, standard })}`);
+      // Resolved straight from the registry/resolver contracts over a public RPC — no ADDR API call,
+      // no SDK. The backend being down does not block looking up or sending to a name.
+      const r = await resolveOnChain(name, network, symbol, standard);
       mount(result, confirmCard(r, amount.value.trim()));
     } catch (e) { mount(result, alert("bad", e.message)); }
   }, "large block");

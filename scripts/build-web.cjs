@@ -16,6 +16,31 @@ if (fs.existsSync(envFile)) {
   }
 }
 
+// Bake the deployment's contract addresses + chain info into the bundle too, as a fallback for
+// loadChain() to use if GET /v1/contracts can't be reached (backend down, DNS issue, etc). Resolving a
+// .addr name and sending to it needs nothing from the ADDR backend beyond these public, static facts —
+// everything else (registry.statusOf, resolver.addr, ...) is a direct RPC call. Without this fallback,
+// "works without the API" would still secretly depend on the API once, just to learn its own addresses.
+const chainId = Number(process.env.CHAIN_ID || 31337);
+const depPath = path.join(root, "deployments", `${chainId}.json`);
+let chainFallback = null;
+if (fs.existsSync(depPath)) {
+  const dep = JSON.parse(fs.readFileSync(depPath, "utf8"));
+  chainFallback = {
+    chainId: dep.chainId, registry: dep.registry, resolver: dep.resolver, registrar: dep.registrar,
+    timelock: dep.timelock, ethUsdFeed: dep.ethUsdFeed, acceptedTokens: dep.tokens, treasury: dep.treasury,
+    startBlock: dep.startBlock, relayer: null, tld: "addr",
+    chain: {
+      id: dep.chainId,
+      name: process.env.CHAIN_NAME || (dep.chainId === 31337 ? "ADDR Local" : `Chain ${dep.chainId}`),
+      rpcUrl: process.env.PUBLIC_RPC_URL || (process.env.RPC_URLS || "http://127.0.0.1:8545").split(",")[0].trim(),
+      explorer: process.env.CHAIN_EXPLORER || "", currency: process.env.CHAIN_CURRENCY || "ETH", minCommitmentAge: undefined,
+    },
+  };
+} else {
+  console.warn(`no deployments/${chainId}.json found — the browser will have no offline fallback if the API is unreachable`);
+}
+
 esbuild.buildSync({
   entryPoints: [path.join(root, "web/src/main.js")],
   bundle: true, minify: !dev, sourcemap: dev, format: "iife", target: "es2022",
@@ -23,6 +48,7 @@ esbuild.buildSync({
   define: {
     "process.env.NODE_ENV": '"production"',
     "process.env.WALLETCONNECT_PROJECT_ID": JSON.stringify(process.env.WALLETCONNECT_PROJECT_ID || ""),
+    "process.env.CHAIN_FALLBACK": JSON.stringify(JSON.stringify(chainFallback)),
   },
   logLevel: "info",
 });

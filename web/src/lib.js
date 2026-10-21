@@ -264,9 +264,16 @@ export async function api(method, path, body, opts = {}) {
   return json;
 }
 
+// Baked in at build time from deployments/<chainId>.json by scripts/build-web.cjs — the same public,
+// static facts GET /v1/contracts returns. Used only if that request fails, so resolving/sending never
+// secretly depends on the ADDR backend being reachable, not even once just to learn its own addresses.
+const CHAIN_FALLBACK = (() => { try { return JSON.parse(process.env.CHAIN_FALLBACK || "null"); } catch { return null; } })();
+
 export const chain = { info: null };
 export async function loadChain() {
-  if (!chain.info) chain.info = await api("GET", "/v1/contracts");
+  if (chain.info) return chain.info;
+  try { chain.info = await api("GET", "/v1/contracts"); }
+  catch (e) { if (CHAIN_FALLBACK) chain.info = CHAIN_FALLBACK; else throw e; }
   return chain.info;
 }
 
