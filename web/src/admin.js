@@ -1,10 +1,20 @@
-import { h, mount, icon, btn, field, alert, api, pill, statusPill, tabs, table, skeleton, empty, fmtTime, timeAgo, short, toast, navigate, query, auth, copyLine, kv } from "./lib.js";
+import { h, mount, icon, btn, field, alert, api, pill, statusPill, tabs, table, skeleton, empty, fmtTime, timeAgo, short, toast, navigate, query, auth, copyLine, copy, kv } from "./lib.js";
 
-// Base mainnet deployment in progress — not read from any API since the contracts aren't live yet.
-// Remove this block once the deployment is finished and addr.krl.kr is actually pointed at Base.
+// Base mainnet is live (deployments/8453.json), but ownership of registry/registrar is only *pending*
+// acceptance by the timelock (Ownable2Step) — the Safe still needs to schedule() now and execute() after
+// the 2-day delay. Hardcoded (not read from any API) since this is a one-time manual step. Remove this
+// whole block once the handoff is confirmed complete (registry.owner() === registrar.owner() === timelock).
 const BASE_DEPLOY = {
   adminMultisig: "0x08af8bc9d5b7f1DD0469c3A68DD40a26a05efb34", // your Safe on Base: admin + treasury
-  deployer: "0x3F50d09906ddd2f6c14eA3594355AB79D169701b", // throwaway, single-use deploy key — needs ~0.02 ETH on Base for gas
+  deployer: "0x3F50d09906ddd2f6c14eA3594355AB79D169701b", // throwaway, single-use deploy key
+  timelock: "0x6ce22A0c1bf0C021f9c3ae906F7Be77aD51e1679",
+  registry: "0x2FDeE277BE3fAeCa14140617A90a71d8A903c78E",
+  registrar: "0x0E0e5F4Db5aF477b42FAfBc6b14E31EF6FFE1386",
+  // acceptOwnership() on each, pre-encoded for Safe's Transaction Builder app (To=timelock, Value=0, Data=below)
+  scheduleRegistry: "0x01d5062a0000000000000000000000002fdee277be3faeca14140617a90a71d8a903c78e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002a300000000000000000000000000000000000000000000000000000000000000000479ba509700000000000000000000000000000000000000000000000000000000",
+  scheduleRegistrar: "0x01d5062a0000000000000000000000000e0e5f4db5af477b42fafbc6b14e31ef6ffe1386000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002a300000000000000000000000000000000000000000000000000000000000000000479ba509700000000000000000000000000000000000000000000000000000000",
+  executeRegistry: "0x134008d30000000000000000000000002fdee277be3faeca14140617a90a71d8a903c78e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000479ba509700000000000000000000000000000000000000000000000000000000",
+  executeRegistrar: "0x134008d30000000000000000000000000e0e5f4db5af477b42fafbc6b14e31ef6ffe1386000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000479ba509700000000000000000000000000000000000000000000000000000000",
 };
 
 let tokenValue = ""; // optional static admin token, kept in memory only
@@ -33,16 +43,37 @@ async function stats(body) {
     s.invoices.length ? h("div", { class: "card stack" }, h("h3", { style: "margin:0" }, "Invoices by status"), h("div", { class: "row tight" }, s.invoices.map((i) => pill(`${i.status}: ${i.c}`, i.status === "completed" ? "ok" : ["registration_failed", "needs_review", "underpaid"].includes(i.status) ? "bad" : "warn")))) : null));
 }
 
+function txField(label, data) {
+  return h("div", { style: "margin-top:10px" },
+    h("div", { class: "help", style: "margin:0 0 4px" }, label),
+    h("pre", { style: "max-height:90px;font-size:11px;word-break:break-all;white-space:pre-wrap" }, data),
+    btn("Copy data", () => copy(data, "Data copied"), "ghost small"));
+}
+
 async function infra(body) {
   const h2 = await call("GET", "/v1/admin/health");
+  const safeUrl = `https://app.safe.global/home?safe=base:${BASE_DEPLOY.adminMultisig}`;
   mount(body, h("div", { class: "stack lg" },
     h("div", { class: "card stack" },
-      h("div", { class: "row between" }, h("h3", { style: "margin:0" }, "Base mainnet deployment"), pill("in progress", "warn", true)),
-      h("p", { class: "muted", style: "margin:0" }, "Deploying the registry/resolver/registrar/timelock contracts to Base. These two addresses aren't live contract addresses yet — just the accounts involved in getting there."),
+      h("div", { class: "row between" }, h("h3", { style: "margin:0" }, "Base mainnet: ownership handoff"), pill("pending", "warn", true)),
+      h("p", { class: "muted", style: "margin:0" }, "Contracts are live. Registry and registrar ownership was transferred to the timelock but needs your Safe to accept it — a two-step process (Ownable2Step) via the timelock's schedule() then, after a 2-day delay, execute(). Until this completes the throwaway deployer key still holds admin rights over these two contracts."),
       kv([
-        ["Admin + treasury (your Safe)", h("div", { class: "stack", style: "gap:6px" }, copyLine(BASE_DEPLOY.adminMultisig), h("a", { href: `https://basescan.org/address/${BASE_DEPLOY.adminMultisig}`, target: "_blank", rel: "noopener", class: "help" }, "View on Basescan"))],
-        ["Deployer (throwaway, gas only)", h("div", { class: "stack", style: "gap:6px" }, copyLine(BASE_DEPLOY.deployer), h("a", { href: `https://basescan.org/address/${BASE_DEPLOY.deployer}`, target: "_blank", rel: "noopener", class: "help" }, "View on Basescan"))],
+        ["Your Safe (admin + treasury)", h("div", { class: "stack", style: "gap:6px" }, copyLine(BASE_DEPLOY.adminMultisig), h("a", { href: safeUrl, target: "_blank", rel: "noopener", class: "help" }, "Open in Safe →"))],
+        ["Timelock", copyLine(BASE_DEPLOY.timelock)],
+        ["Registry", copyLine(BASE_DEPLOY.registry)],
+        ["Registrar", copyLine(BASE_DEPLOY.registrar)],
+        ["Deployer (throwaway, holds admin until handoff completes)", copyLine(BASE_DEPLOY.deployer)],
       ])),
+    h("div", { class: "card stack" },
+      h("h3", { style: "margin:0" }, "Step 1 — schedule (do this now)"),
+      h("p", { class: "muted", style: "margin:0" }, "In Safe → Apps → Transaction Builder: add both calls below as one batch, To = the timelock address above, Value = 0 for both, then send the batch and collect signatures."),
+      txField("Data — accept registry ownership", BASE_DEPLOY.scheduleRegistry),
+      txField("Data — accept registrar ownership", BASE_DEPLOY.scheduleRegistrar)),
+    h("div", { class: "card stack" },
+      h("h3", { style: "margin:0" }, "Step 2 — execute (wait 2 days after step 1, then do this)"),
+      h("p", { class: "muted", style: "margin:0" }, "Same process: Transaction Builder, To = timelock, Value = 0, batch both. This finishes the handoff — after it executes, your Safe fully controls both contracts."),
+      txField("Data — accept registry ownership", BASE_DEPLOY.executeRegistry),
+      txField("Data — accept registrar ownership", BASE_DEPLOY.executeRegistrar)),
     h("div", { class: "stack" }, h("h3", { style: "margin:0" }, "RPC providers"), table(["Endpoint", "Status", "Latency", "Block", "Last hour OK / total"], h2.live.map((r) => { const s = h2.lastHour.find((x) => x.url === r.url);
       return h("tr", null, h("td", { class: "mono" }, r.url), h("td", null, pill(r.ok ? "up" : r.error || "down", r.ok ? "ok" : "bad", true)), h("td", null, `${r.ms} ms`), h("td", null, r.block ?? "-"), h("td", null, s ? `${s.ok} / ${s.n}` : "-")); })))));
 }
