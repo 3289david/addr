@@ -5,7 +5,7 @@ export async function dev(root) {
   const go = (t) => navigate(t === "overview" ? "/dev" : `/dev?tab=${t}`);
   mount(root, h("div", { class: "page-head" },
     h("div", { class: "row between" }, h("div", null, h("h1", null, "Developer console"), h("p", null, `Signed in as ${auth.user.email}. Manage API keys, watch usage and try the API.`)),
-      h("div", { class: "row tight" }, h("a", { class: "btn ghost", href: "/docs/", target: "_blank", rel: "noopener" }, icon("code", 16), "Specification"), h("a", { class: "btn ghost", href: "/openapi.json", target: "_blank", rel: "noopener" }, "OpenAPI")))),
+      h("div", { class: "row tight" }, h("a", { class: "btn ghost", href: "/api" }, icon("code", 16), "API reference"), h("a", { class: "btn ghost", href: "/docs/", target: "_blank", rel: "noopener" }, "Specification")))),
     h("div", { style: "margin-bottom:22px" }, tabs([["overview", "Overview"], ["keys", "API keys"], ["console", "API console"], ["sdk", "SDK and CLI"], ["account", "Account"]], tab, go)),
     h("div", { id: "dev-body" }, skeleton(4)));
   const body = root.querySelector("#dev-body");

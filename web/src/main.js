@@ -10,6 +10,7 @@ import { dev } from "./dev.js";
 import { enterprise } from "./enterprise.js";
 import { admin } from "./admin.js";
 import { legal } from "./legal.js";
+import { apidocs } from "./apidocs.js";
 
 const NAV = [["/", "Search"], ["/names", "My names"], ["/send", "Send"], ["/dev", "Developers"], ["/enterprise", "Enterprise"]];
 const toggleTheme = initTheme();
@@ -27,6 +28,7 @@ const routes = [
   [/^\/enterprise\/?$/, (r) => enterprise(r)],
   [/^\/admin\/?$/, (r) => admin(r)],
   [/^\/legal\/([a-z-]+)\/?$/, (r, m) => legal(r, m[1])],
+  [/^\/api\/?$/, (r) => apidocs(r)],
   [/^\/login\/?$/, (r) => mount(r, loginView(safeNext(query().next)))],
   [/^\/auth\/verify\/?$/, (r) => mount(r, verifyLinkView())],
 ];
@@ -45,7 +47,7 @@ function buildShell() {
   const foot = h("footer", { class: "foot" }, h("div", { class: "foot-grid" },
     h("div", null, h("a", { class: "brand", href: "/", style: "margin-bottom:12px" }, h("span", { class: "mark" }, "A"), h("span", { class: "word" }, "ADDR")), h("p", { class: "muted", style: "font-size:13.5px;max-width:300px;margin:0" }, "Readable names for crypto addresses. Records are public and verified on the chain you use.")),
     col("Product", [["/", "Search names"], ["/send", "Send"], ["/names", "My names"], ["/dev", "Developers"], ["/enterprise", "Enterprise"]]),
-    col("Resources", [["/docs/", "Specification", true], ["/docs/integration-guide.md", "Integration guide", true], ["/openapi.json", "OpenAPI", true], ["/legal/report", "Report a name"]]),
+    col("Resources", [["/api", "API reference"], ["/docs/", "Specification", true], ["/docs/integration-guide.md", "Integration guide", true], ["/openapi.json", "Raw OpenAPI", true], ["/legal/report", "Report a name"]]),
     col("Legal", [["/legal/terms", "Terms of Service"], ["/legal/privacy", "Privacy Policy"], ["/legal/privacy-ko", "개인정보 처리방침"], ["/legal/acceptable-use", "Acceptable Use"], ["/legal/refunds", "Payments and refunds"], ["/legal/risks", "Risk disclosure"], ["/legal/name-policy", "Name policy"], ["/legal/cookies", "Cookies"]])),
     h("div", { class: "foot-base" }, h("span", null, "A resolved name is not an endorsement of the recipient. Always check the address before you send."), h("span", null, "\u00a9 ADDR")));
   mount($("#root"), header, main, foot);
@@ -106,7 +108,7 @@ async function render() {
   shell.nav.querySelectorAll("a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === path || (a.getAttribute("href") === "/" && path.startsWith("/name/"))));
   root.classList.toggle("wide", path === "/enterprise" || path === "/admin");
   root.classList.toggle("landing", path === "/");
-  document.title = path === "/" ? "ADDR - Your name is your address" : `${path.slice(1).split("/")[0].replace(/^./, (c) => c.toUpperCase())} - ADDR`;
+  document.title = path === "/" ? "ADDR - Your name is your address" : path === "/api" ? "API reference - ADDR" : `${path.slice(1).split("/")[0].replace(/^./, (c) => c.toUpperCase())} - ADDR`;
   if (!auth.loaded) await loadAuth();
   if (PROTECTED[path] && !auth.user) { mount(root, loginView(path, PROTECTED[path])); return; }
   for (const [re, fn] of routes) {
