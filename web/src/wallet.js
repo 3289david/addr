@@ -82,15 +82,23 @@ export async function connectWalletConnect() {
     showQrModal: true,
     metadata: { name: "ADDR", description: "Human-readable Web3 names", url: location.origin, icons: [location.origin + "/icon.png"] },
   });
-  let accounts;
-  try {
-    accounts = await provider.enable(); // eth_requestAccounts-equivalent: resolves with the account list directly
-  } catch (e) {
-    provider.events?.removeAllListeners?.();
-    throw e.message?.includes("User rejected") || e.message?.includes("rejected") ? CANCEL() : e;
+  // Not provider.enable(): internally it skips the real pairing/approval flow whenever a session already
+  // exists (incl. a stale one left over from a previous visit) and instead sends a plain eth_requestAccounts
+  // RPC call over that session — many wallets approve the WalletConnect session fine but don't implement
+  // that follow-up RPC, so enable() can resolve with nothing even though the connection genuinely worked.
+  // provider.connect() runs the actual pairing/QR/approval flow and sets provider.accounts directly from
+  // the approved session namespaces, which is the reliable source.
+  if (provider.session && !provider.accounts?.length) await provider.disconnect().catch(() => {}); // clear a stale, account-less session so a fresh pairing happens
+  if (!(provider.session && provider.accounts?.length)) {
+    try {
+      await provider.connect();
+    } catch (e) {
+      provider.events?.removeAllListeners?.();
+      throw /rejected|reset/i.test(e.message || "") ? CANCEL() : e;
+    }
   }
-  accounts = accounts?.length ? accounts : provider.accounts; // some wallets only populate provider.accounts, not enable()'s return value
-  if (!accounts?.length) throw new Error("The wallet did not share an account");
+  const accounts = provider.accounts;
+  if (!accounts?.length) throw new Error("The wallet connected but didn't share an account — please try again and approve the account/network prompt in your wallet app.");
   wcProvider = provider;
   wallet.raw = provider;
   wallet.provider = new BrowserProvider(provider, "any");
