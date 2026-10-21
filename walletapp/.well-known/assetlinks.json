@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "kr.krl.addrwallet",
+    "sha256_cert_fingerprints": ["6F:9F:5F:FD:85:47:9B:EE:47:09:AF:BC:00:B6:90:35:AD:41:BE:18:AC:C0:A5:5A:AA:5A:E1:66:DD:33:A7:FC"]
+  }
+}]

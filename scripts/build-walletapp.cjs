@@ -50,4 +50,9 @@ fs.copyFileSync(path.join(srcDir, "manifest.json"), path.join(dist, "manifest.js
 fs.copyFileSync(path.join(srcDir, "sw.js"), path.join(dist, "sw.js"));
 fs.mkdirSync(path.join(dist, "icons"), { recursive: true });
 for (const f of fs.readdirSync(path.join(srcDir, "icons"))) fs.copyFileSync(path.join(srcDir, "icons", f), path.join(dist, "icons", f));
+const wellKnownDir = path.join(srcDir, ".well-known");
+if (fs.existsSync(wellKnownDir)) {
+  fs.mkdirSync(path.join(dist, ".well-known"), { recursive: true });
+  for (const f of fs.readdirSync(wellKnownDir)) fs.copyFileSync(path.join(wellKnownDir, f), path.join(dist, ".well-known", f));
+}
 console.log("built wallet app (static, no backend)");
