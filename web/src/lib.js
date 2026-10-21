@@ -64,6 +64,7 @@ const P = {
   inbox: '<path d="M3 13h5l1 3h6l1-3h5"/><path d="M5 5h14l2 8v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+  phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
 };
 export function icon(name, size = 18) {
   const s = h("span", { class: "ico-wrap", style: `display:inline-flex;width:${size}px;height:${size}px;flex:none` });
@@ -168,7 +169,8 @@ export function modal({ title, body, footer, wide = false, dismissible = true })
   back.addEventListener("mousedown", (e) => { if (e.target === back && dismissible) api.close(undefined); });
   box.append(
     h("div", { class: "modal-head" }, h("h2", null, title), dismissible ? h("button", { class: "icon-btn", "aria-label": "Close", onclick: () => api.close(undefined) }, icon("x", 18)) : null),
-    h("div", { class: "modal-body" }, body), footer ? h("div", { class: "modal-foot" }, footer) : null);
+    h("div", { class: "modal-body" }, body));
+  if (footer) box.append(h("div", { class: "modal-foot" }, footer));
   back.append(box);
   document.body.append(back);
   setTimeout(() => (box.querySelector("input, button.btn, button.option") || box).focus?.(), 30);

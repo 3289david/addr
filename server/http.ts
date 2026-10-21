@@ -99,6 +99,18 @@ export function createServer() {
         return res.end();
       }
       if (!url.pathname.startsWith("/v1/")) {
+        if (url.pathname === "/robots.txt") {
+          const base = config.publicUrl || `http://${req.headers.host || config.host}`;
+          res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600", ...SEC_HEADERS });
+          return res.end(`User-agent: *\nAllow: /\nDisallow: /dev\nDisallow: /enterprise\nDisallow: /admin\nDisallow: /login\nDisallow: /auth/verify\nDisallow: /invoice/\n\nSitemap: ${base}/sitemap.xml\n`);
+        }
+        if (url.pathname === "/sitemap.xml") {
+          const base = config.publicUrl || `http://${req.headers.host || config.host}`;
+          const paths = ["/", "/names", "/send", "/legal/terms", "/legal/privacy", "/legal/privacy-ko", "/legal/acceptable-use", "/legal/refunds", "/legal/risks", "/legal/name-policy", "/legal/cookies", "/legal/report"];
+          const urls = paths.map((p) => `  <url><loc>${base}${p}</loc></url>`).join("\n");
+          res.writeHead(200, { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600", ...SEC_HEADERS });
+          return res.end(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+        }
         if (url.pathname === "/openapi.json") {
           if (serveStatic(path.join(config.root, "docs"), "openapi.json", res)) return;
           return send(res, 404, { error: { code: "not_found", message: "not found" } });

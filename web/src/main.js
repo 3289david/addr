@@ -86,7 +86,7 @@ function drawWallet() {
 
 function drawAccount() {
   const box = shell.acctBox;
-  if (!auth.user) { mount(box, h("a", { class: "btn small", href: `/login?next=${encodeURIComponent(location.pathname)}` }, "Sign in")); return; }
+  if (!auth.user) { mount(box, h("a", { class: "btn small", href: `/login?next=${encodeURIComponent(location.pathname)}` }, h("span", { class: "row tight" }, icon("user", 16), h("span", { class: "lbl" }, "Sign in")))); return; }
   const t = h("button", { class: "icon-btn", "aria-label": "Account menu", "aria-haspopup": "menu", style: "background:var(--grad);color:#fff;border:0;font-weight:700" }, auth.user.email[0].toUpperCase());
   dropdown(box, t, () => [
     h("div", { class: "meta" }, h("div", { style: "font-weight:650;color:var(--text)" }, auth.user.email), h("div", { class: "faint", style: "margin-top:2px" }, `${(auth.tenant?.plan || "free").toUpperCase()} plan`)),

@@ -11,6 +11,7 @@ import { Contract, JsonRpcProvider, Wallet, ethers } from "ethers";
 import { registryAbi, resolverAbi, registrarAbi, erc20Abi, namehash, encodeAddress, getNetwork, bytesToHex } from "../packages/core/src/index.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
+const tsxBin = path.join(root, "node_modules", ".bin", "tsx");
 const dep = JSON.parse(fs.readFileSync(path.join(root, "deployments", "31337.json"), "utf8"));
 const PORT = 8799;
 const API = `http://127.0.0.1:${PORT}`;
@@ -80,7 +81,7 @@ before(async () => {
     EVM_RPC_ETHEREUM: "http://127.0.0.1:8545", PAYMENTS_SKIP_CHAINID_CHECK: "1",
     ASSET_ETHEREUM_USDT: dep.tokens.USDT, MINCONF_EVM: "1",
   };
-  server = spawn(process.execPath, ["--no-warnings", path.join(root, "server", "index.ts")], { env, stdio: ["ignore", "pipe", "pipe"] });
+  server = spawn(tsxBin, ["--no-warnings", path.join(root, "server", "index.ts")], { env, stdio: ["ignore", "pipe", "pipe"] });
   server.stderr!.on("data", (d) => process.stderr.write("[server] " + d));
   await waitFor(async () => (await fetch(API + "/v1/contracts").then((r) => r.ok).catch(() => false)), 15000, "server start");
 });

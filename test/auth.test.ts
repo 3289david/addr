@@ -12,6 +12,7 @@ import { startSink, verifyDkim, decodeBodies } from "./helpers/smtp-sink.ts";
 import { generateDkimKeys } from "../server/mail.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
+const tsxBin = path.join(root, "node_modules", ".bin", "tsx");
 const PORT = 8797;
 const API = `http://127.0.0.1:${PORT}`;
 const ADMIN = "auth-admin-token";
@@ -67,12 +68,13 @@ before(async () => {
   const dk = generateDkimKeys();
   dkimPub = `-----BEGIN PUBLIC KEY-----\n${dk.publicKeyBase64.match(/.{1,64}/g)!.join("\n")}\n-----END PUBLIC KEY-----\n`;
   dbFile = path.join(tmp, "auth.db");
-  server = spawn(process.execPath, ["--no-warnings", path.join(root, "server", "index.ts")], {
+  server = spawn(tsxBin, ["--no-warnings", path.join(root, "server", "index.ts")], {
     env: {
       ...process.env, PORT: String(PORT), DB_PATH: dbFile, ADMIN_TOKEN: ADMIN, INDEX_INTERVAL_MS: "2000",
       MAIL_TRANSPORT: "direct", MAIL_MX_OVERRIDE: `127.0.0.1:${sink.port}`, MAIL_FROM: "ADDR <login@addr.test>",
       DKIM_PRIVATE_KEY: dk.privateKey, DKIM_SELECTOR: "t1", PUBLIC_URL: "http://127.0.0.1:" + PORT,
       ADMIN_EMAILS: "boss@example.test", LOGIN_IP_PER_HOUR: "500", OPERATOR_KEY: "", FREE_SIGNER_KEY: "",
+      LEGAL_ENTITY: "", LEGAL_EMAIL: "",
     },
     stdio: ["ignore", "ignore", "inherit"],
   });

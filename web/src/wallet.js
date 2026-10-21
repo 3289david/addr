@@ -5,9 +5,15 @@ import { AbstractSigner, BrowserProvider, Contract, JsonRpcProvider, getAddress,
 import { registryAbi, resolverAbi, registrarAbi, erc20Abi } from "../../packages/core/src/index.ts";
 import { h, mount, modal, btn, icon, copy, copyLine, qr, alert, field, kv, loadChain, store, toast, sleep, short } from "./lib.js";
 
+// Baked in at build time from .env (WALLETCONNECT_PROJECT_ID) by scripts/build-web.cjs. Public by design:
+// a WalletConnect project id identifies the dapp to the relay, it is not a secret.
+const WC_PROJECT_ID = process.env.WALLETCONNECT_PROJECT_ID || "";
+export const walletConnectEnabled = () => !!WC_PROJECT_ID;
+
 export const wallet = { mode: null, address: null, chainId: null, label: "", provider: null, signer: null, listeners: [], raw: null };
 const emitChange = () => wallet.listeners.forEach((f) => f());
 const CANCEL = () => Object.assign(new Error("Request cancelled"), { code: "CANCELLED" });
+const COMMON_CHAINS = [1, 137, 8453, 42161, 10, 56]; // mainnet, polygon, base, arbitrum, optimism, bnb — so a mobile wallet always has something to approve
 
 export const isConnected = () => !!wallet.address;
 export const canSign = () => wallet.mode === "injected" || wallet.mode === "manual";
@@ -48,6 +54,46 @@ export async function connectInjected(entry) {
   emitChange();
 }
 
+let wcProvider = null;
+
+/** Connects a mobile wallet app over WalletConnect: shows a QR to scan, or deep-links straight into the
+ *  wallet app on a phone. Needs WALLETCONNECT_PROJECT_ID configured at build time (free, cloud.reown.com). */
+export async function connectWalletConnect() {
+  if (!WC_PROJECT_ID) throw new Error("Mobile wallet connection is not configured on this deployment.");
+  const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
+  const info = await loadChain();
+  const required = COMMON_CHAINS.includes(1) ? 1 : COMMON_CHAINS[0];
+  const optional = [...new Set([info.chain.id, ...COMMON_CHAINS])].filter((id) => id !== required);
+  const provider = await EthereumProvider.init({
+    projectId: WC_PROJECT_ID,
+    chains: [required],
+    optionalChains: optional,
+    rpcMap: { [info.chain.id]: info.chain.rpcUrl },
+    showQrModal: true,
+    metadata: { name: "ADDR", description: "Human-readable Web3 names", url: location.origin, icons: [location.origin + "/icon.png"] },
+  });
+  try {
+    await provider.enable();
+  } catch (e) {
+    provider.events?.removeAllListeners?.();
+    throw e.message?.includes("User rejected") || e.message?.includes("rejected") ? CANCEL() : e;
+  }
+  if (!provider.accounts?.length) throw new Error("The wallet did not share an account");
+  wcProvider = provider;
+  wallet.raw = provider;
+  wallet.provider = new BrowserProvider(provider, "any");
+  wallet.signer = await wallet.provider.getSigner();
+  wallet.address = getAddress(await wallet.signer.getAddress());
+  wallet.chainId = Number((await wallet.provider.getNetwork()).chainId);
+  wallet.mode = "injected";
+  wallet.label = "Mobile wallet";
+  provider.on("accountsChanged", (a) => { if (wallet.raw === provider) { if (!a.length) disconnect(); else { wallet.address = getAddress(a[0]); emitChange(); } } });
+  provider.on("chainChanged", (c) => { if (wallet.raw === provider) { wallet.chainId = Number(c); emitChange(); } });
+  provider.on("disconnect", () => { if (wallet.raw === provider) disconnect(); });
+  store.set("walletPref", { mode: "walletconnect" }); // remembered as a hint only; never auto-connects
+  emitChange();
+}
+
 export async function connectManual(address) {
   if (!isAddress(address)) throw new Error("Enter a valid EVM address (0x...)");
   const info = await loadChain();
@@ -63,6 +109,7 @@ export async function connectManual(address) {
 }
 
 export function disconnect() {
+  if (wcProvider && wallet.raw === wcProvider) { const p = wcProvider; wcProvider = null; p.disconnect().catch(() => {}); }
   wallet.mode = null; wallet.address = null; wallet.chainId = null; wallet.provider = null; wallet.signer = null; wallet.raw = null; wallet.label = "";
   emitChange();
 }
@@ -79,6 +126,15 @@ export function openConnect() {
       body: h("div", { class: "stack" },
         h("p", { class: "muted", style: "margin:0" }, "Nothing is connected until you pick an option. ADDR never sees your private keys."),
         list,
+        walletConnectEnabled()
+          ? h("button", { class: "option", type: "button", onclick: async () => {
+              try { await connectWalletConnect(); toast(`Connected to ${wallet.label}`); m.close(true); } catch (e) { if (e.code !== "CANCELLED") toast(e.message, "bad"); }
+            } },
+              h("span", { class: "ico" }, icon("phone", 22)),
+              h("span", null, h("div", { class: "t" }, "Connect with a mobile wallet app"), h("div", { class: "d" }, "Scan a QR code, or tap to open your wallet app directly on your phone.")))
+          : h("div", { class: "option", style: "cursor:default;opacity:.6" },
+              h("span", { class: "ico" }, icon("phone", 22)),
+              h("span", null, h("div", { class: "t" }, "Connect with a mobile wallet app"), h("div", { class: "d" }, "Not configured on this deployment yet."))),
         h("button", { class: "option", type: "button", onclick: () => { manualBox.classList.toggle("hide"); manualInput.focus(); } },
           h("span", { class: "ico" }, icon("key", 22)),
           h("span", null, h("div", { class: "t" }, "Enter address manually"), h("div", { class: "d" }, "Use any wallet or hardware device. Transactions are shown as fields to copy; you send them yourself and paste the hash."))),

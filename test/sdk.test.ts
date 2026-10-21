@@ -9,6 +9,7 @@ import { Contract, JsonRpcProvider, Wallet, ethers } from "ethers";
 import { Addr, AddrChainResolver, AddrApiError, verifyWebhook, registrarAbi, resolverAbi, namehash, encodeAddress, getNetwork, bytesToHex } from "../packages/sdk/src/index.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
+const tsxBin = path.join(root, "node_modules", ".bin", "tsx");
 const dep = JSON.parse(fs.readFileSync(path.join(root, "deployments", "31337.json"), "utf8"));
 const PORT = 8798;
 const provider = new JsonRpcProvider("http://127.0.0.1:8545", 31337, { staticNetwork: true });
@@ -23,7 +24,7 @@ let signer: ethers.Signer;
 
 before(async () => {
   dbFile = path.join(root, "data", `sdk-${Date.now()}.db`);
-  server = spawn(process.execPath, ["--no-warnings", path.join(root, "server", "index.ts")], {
+  server = spawn(tsxBin, ["--no-warnings", path.join(root, "server", "index.ts")], {
     env: { ...process.env, PORT: String(PORT), DB_PATH: dbFile, FREE_SIGNER_KEY: DEV_KEY, OPERATOR_KEY: DEV_KEY, INDEX_INTERVAL_MS: "400", FREE_CLAIMS_PER_IP_PER_DAY: "50" },
     stdio: ["ignore", "ignore", "inherit"],
   });
@@ -82,7 +83,7 @@ test("webhook signature verification accepts valid and rejects tampered or stale
 });
 
 test("CLI works end to end", () => {
-  const run = (...a: string[]) => execFileSync(process.execPath, ["--no-warnings", path.join(root, "packages", "cli", "addr.ts"), ...a], { env: { ...process.env, ADDR_API: `http://127.0.0.1:${PORT}` }, encoding: "utf8" });
+  const run = (...a: string[]) => execFileSync(tsxBin, ["--no-warnings", path.join(root, "packages", "cli", "addr.ts"), ...a], { env: { ...process.env, ADDR_API: `http://127.0.0.1:${PORT}` }, encoding: "utf8" });
   assert.equal(JSON.parse(run("resolve", `${label}.addr`, "--network", "tron")).address, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
   assert.equal(JSON.parse(run("resolve-onchain", `${label}.addr`, "--network", "tron", "--rpc", "http://127.0.0.1:8545")).address, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
   assert.equal(JSON.parse(run("validate", "bitcoin", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")).valid, true);
