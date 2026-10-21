@@ -1,4 +1,6 @@
-import { h, mount, icon, btn, field, alert, api, pill, statusPill, tabs, table, skeleton, empty, fmtTime, timeAgo, short, toast, navigate, query, auth, copyLine, copy, kv } from "./lib.js";
+import { h, mount, icon, btn, field, alert, api, pill, statusPill, tabs, table, skeleton, empty, fmtTime, timeAgo, short, toast, navigate, query, auth, copyLine, copy, kv, loadChain } from "./lib.js";
+import { readProvider } from "./wallet.js";
+import { formatEther } from "ethers";
 
 // Base mainnet is live (deployments/8453.json), but ownership of registry/registrar is only *pending*
 // acceptance by the timelock (Ownable2Step) — the Safe still needs to schedule() now and execute() after
@@ -52,7 +54,11 @@ function txField(label, data) {
 
 async function infra(body) {
   const h2 = await call("GET", "/v1/admin/health");
+  const info = await loadChain();
   const safeUrl = `https://app.safe.global/home?safe=base:${BASE_DEPLOY.adminMultisig}`;
+  let relayerBalance = null;
+  if (info.relayer) { try { relayerBalance = await (await readProvider()).getBalance(info.relayer); } catch { /* rpc unavailable */ } }
+  const explorerAddr = (a) => info.chain.explorer ? h("a", { href: `${info.chain.explorer}/address/${a}`, target: "_blank", rel: "noopener", class: "help" }, "View on explorer →") : null;
   mount(body, h("div", { class: "stack lg" },
     h("div", { class: "card stack" },
       h("div", { class: "row between" }, h("h3", { style: "margin:0" }, "Base mainnet: ownership handoff"), pill("pending", "warn", true)),
@@ -64,6 +70,10 @@ async function infra(body) {
         ["Registrar", copyLine(BASE_DEPLOY.registrar)],
         ["Deployer (throwaway, holds admin until handoff completes)", copyLine(BASE_DEPLOY.deployer)],
       ])),
+    h("div", { class: "card stack" },
+      h("div", { class: "row between" }, h("h3", { style: "margin:0" }, "Gasless relayer wallet"), info.relayer ? pill(relayerBalance != null ? `${formatEther(relayerBalance)} ${info.chain.currency || "ETH"}` : "balance unknown", relayerBalance && relayerBalance > 0n ? "ok" : "bad", true) : pill("not configured", "bad", true)),
+      h("p", { class: "muted", style: "margin:0" }, "Pays gas for sponsored free-name claims and relayed payments. Send it a small amount of native gas currency on this chain — it never holds user funds, only what it needs to pay gas."),
+      info.relayer ? kv([["Relayer (operator) wallet", h("div", { class: "stack", style: "gap:6px" }, copyLine(info.relayer), explorerAddr(info.relayer))]]) : alert("bad", "OPERATOR_KEY is not set — sponsored claims and relayed payments are disabled.")),
     h("div", { class: "card stack" },
       h("h3", { style: "margin:0" }, "Step 1 — schedule (do this now)"),
       h("p", { class: "muted", style: "margin:0" }, "In Safe → Apps → Transaction Builder: add both calls below as one batch, To = the timelock address above, Value = 0 for both, then send the batch and collect signatures."),

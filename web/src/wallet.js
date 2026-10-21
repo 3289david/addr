@@ -1,6 +1,8 @@
-// Wallet layer. Nothing connects automatically: the user chooses a browser wallet (EIP-1193 / EIP-6963 discovery runs
-// only when the connect dialog opens) or enters an address manually. In manual mode every transaction is shown as
-// copyable fields, the user sends it from any wallet and pastes the hash; we confirm it on-chain.
+// Wallet layer. The user chooses a browser wallet (EIP-1193 / EIP-6963 discovery runs only when the connect
+// dialog opens), a mobile wallet app over WalletConnect, or enters an address manually. In manual mode every
+// transaction is shown as copyable fields, the user sends it from any wallet and pastes the hash; we confirm
+// it on-chain. Once connected, the choice is remembered (`walletPref`) and silently resumed on later visits
+// via autoConnect() — never by prompting again, only by reusing permission the wallet already granted.
 import { AbstractSigner, BrowserProvider, Contract, JsonRpcProvider, getAddress, isAddress, verifyMessage } from "ethers";
 import { registryAbi, resolverAbi, registrarAbi, erc20Abi } from "../../packages/core/src/index.ts";
 import { h, mount, modal, btn, icon, copy, copyLine, qr, alert, field, kv, loadChain, store, toast, sleep, short } from "./lib.js";
@@ -47,10 +49,12 @@ export function discoverWallets(waitMs = 250) {
 }
 
 // ---------------------------------------------------------------- connect
-export async function connectInjected(entry) {
+export async function connectInjected(entry, silent = false) {
   const eth = entry.provider;
-  const accounts = await eth.request({ method: "eth_requestAccounts" });
-  if (!accounts?.length) throw new Error("The wallet did not share an account");
+  // "eth_accounts" never prompts — it only returns accounts already authorized for this site, so a
+  // silent background reconnect on page load can't pop up a permission dialog out of nowhere.
+  const accounts = await eth.request({ method: silent ? "eth_accounts" : "eth_requestAccounts" });
+  if (!accounts?.length) { if (silent) return false; throw new Error("The wallet did not share an account"); }
   wallet.raw = eth;
   wallet.provider = new BrowserProvider(eth, "any");
   wallet.signer = await wallet.provider.getSigner();
@@ -60,16 +64,17 @@ export async function connectInjected(entry) {
   wallet.label = entry.name;
   eth.on?.("accountsChanged", (a) => { if (wallet.raw === eth) { if (!a.length) disconnect(); else connectInjected(entry).catch(() => disconnect()); } });
   eth.on?.("chainChanged", () => { if (wallet.raw === eth) connectInjected(entry).catch(() => disconnect()); });
-  store.set("walletPref", { mode: "injected", name: entry.name }); // remembered as a hint only; never auto-connects
+  store.set("walletPref", { mode: "injected", name: entry.name }); // remembered so autoConnect() can silently resume it next visit
   emitChange();
+  return true;
 }
 
 let wcProvider = null;
 
 /** Connects a mobile wallet app over WalletConnect: shows a QR to scan, or deep-links straight into the
  *  wallet app on a phone. Needs WALLETCONNECT_PROJECT_ID configured at build time (free, cloud.reown.com). */
-export async function connectWalletConnect() {
-  if (!WC_PROJECT_ID) throw new Error("Mobile wallet connection is not configured on this deployment.");
+export async function connectWalletConnect(silent = false) {
+  if (!WC_PROJECT_ID) { if (silent) return false; throw new Error("Mobile wallet connection is not configured on this deployment."); }
   const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
   const info = await loadChain();
   // No `chains` (required namespace) on purpose: when it's set, the library sets this.chainId from OUR
@@ -94,6 +99,10 @@ export async function connectWalletConnect() {
   // the approved session namespaces, which is the reliable source.
   if (provider.session && !provider.accounts?.length) await provider.disconnect().catch(() => {}); // clear a stale, account-less session so a fresh pairing happens
   if (!(provider.session && provider.accounts?.length)) {
+    // Silent mode is for auto-reconnecting on page load: only ever resume a session the wallet already
+    // approved. Never call connect() here — that opens a fresh QR/approval flow, which must only ever
+    // happen from an explicit user click (the "Show QR code" button), not automatically in the background.
+    if (silent) { provider.events?.removeAllListeners?.(); return false; }
     try {
       await provider.connect();
     } catch (e) {
@@ -126,8 +135,9 @@ export async function connectWalletConnect() {
   provider.on("accountsChanged", (a) => { if (wallet.raw === provider) { if (!a.length) disconnect(); else { wallet.address = getAddress(a[0]); emitChange(); } } });
   provider.on("chainChanged", (c) => { if (wallet.raw === provider) { wallet.chainId = Number(c); emitChange(); } });
   provider.on("disconnect", () => { if (wallet.raw === provider) disconnect(); });
-  store.set("walletPref", { mode: "walletconnect" }); // remembered as a hint only; never auto-connects
+  store.set("walletPref", { mode: "walletconnect" }); // remembered so autoConnect() can silently resume it next visit
   emitChange();
+  return true;
 }
 
 export async function connectManual(address) {
@@ -141,7 +151,30 @@ export async function connectManual(address) {
   wallet.label = "Manual address";
   wallet.signer = new ManualSigner(wallet.address, wallet.provider);
   store.set("manualAddress", wallet.address);
+  store.set("walletPref", { mode: "manual" }); // remembered so autoConnect() can silently resume it next visit
   emitChange();
+}
+
+/** Silently resumes the last-connected wallet on page load, if any. Never prompts: injected wallets are
+ *  queried with eth_accounts (no popup), WalletConnect only resumes an already-approved session, and
+ *  manual mode just re-shows the previously entered address. Any failure here is swallowed — the user
+ *  just sees "Connect wallet" again, same as before this existed. */
+export async function autoConnect() {
+  const pref = store.get("walletPref");
+  if (!pref) return false;
+  try {
+    if (pref.mode === "injected") {
+      const list = await discoverWallets();
+      const entry = list.find((w) => w.name === pref.name) || list[0];
+      return entry ? await connectInjected(entry, true) : false;
+    }
+    if (pref.mode === "walletconnect") return await connectWalletConnect(true);
+    if (pref.mode === "manual") {
+      const addr = store.get("manualAddress", "");
+      if (addr && isAddress(addr)) { await connectManual(addr); return true; }
+    }
+  } catch { /* silent by design */ }
+  return false;
 }
 
 export function disconnect() {

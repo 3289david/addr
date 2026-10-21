@@ -1,5 +1,5 @@
 import { h, mount, $, icon, btn, auth, loadAuth, loadChain, router, navigate, initTheme, toast, copy, short, api, query } from "./lib.js";
-import { wallet, openConnect, disconnect, isConnected } from "./wallet.js";
+import { wallet, openConnect, disconnect, isConnected, autoConnect } from "./wallet.js";
 import { loginView, verifyLinkView } from "./auth.js";
 import { home } from "./home.js";
 import { names } from "./names.js";
@@ -129,3 +129,4 @@ auth.listeners.push(() => { drawAccount(); });
 drawWallet(); drawAccount();
 loadChain().catch(() => toast("API unreachable", "bad"));
 loadAuth().finally(() => { drawAccount(); render(); });
+autoConnect(); // silently resumes the last-connected wallet, if any — never prompts
