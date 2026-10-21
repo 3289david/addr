@@ -1,0 +1,43 @@
+{
+  "packageId": "kr.krl.addrwallet",
+  "host": "addrwallet.krl.kr",
+  "name": "ADDR Wallet",
+  "launcherName": "ADDR Wallet",
+  "display": "standalone",
+  "themeColor": "#0A0A09",
+  "themeColorDark": "#0A0A09",
+  "navigationColor": "#0A0A09",
+  "navigationColorDark": "#0A0A09",
+  "navigationDividerColor": "#0A0A09",
+  "navigationDividerColorDark": "#0A0A09",
+  "backgroundColor": "#0A0A09",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://addrwallet.krl.kr/icons/icon-512.png",
+  "maskableIconUrl": "https://addrwallet.krl.kr/icons/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "androidkey"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://addrwallet.krl.kr/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "minSdkVersion": 24,
+  "orientation": "default",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "displayOverride": [],
+  "appVersion": "1.0.0"
+}

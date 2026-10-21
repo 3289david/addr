@@ -7,6 +7,9 @@ data/
 web/dist/
 walletapp/dist/
 extension/dist/
-android-apk/
+android-apk/android.keystore
+android-apk/build/
+android-apk/.gradle/
+android-apk/app/build/
 android-sdk/
 deployments/
