@@ -135,11 +135,15 @@ function registerPanel(x) {
   (async () => {
     const methods = await api("GET", "/v1/payments/methods").catch(() => ({ methods: [] }));
     const c = await loadChain();
-    if (x.price.free) { payment.append(h("option", { value: "free" }, "Free tier")); years.disabled = true; payment.disabled = true; }
+    if (x.price.free) {
+      payment.append(h("option", { value: "sponsored" }, "Free — no gas needed"));
+      payment.append(h("option", { value: "free" }, "Free tier (pay your own gas)"));
+      years.disabled = true; payment.disabled = true;
+    }
     payment.append(h("option", { value: "eth" }, `${c.chain.currency} on ${c.chain.name} (wallet)`));
     for (const [sym, addr] of Object.entries(c.acceptedTokens || {})) if (addr) payment.append(h("option", { value: `token:${addr}` }, `${sym} on ${c.chain.name} (wallet)`));
     for (const m of methods.methods) payment.append(h("option", { value: `coin:${m.network}:${m.asset}:${m.standard}` }, `${m.asset}${m.standard !== "native" ? " " + m.standard : ""} on ${m.networkName} (pay from any wallet)`));
-    if (x.price.free) payment.value = "free";
+    if (x.price.free) payment.value = "sponsored";
   })();
 
   const go = btn(x.price.free ? "Claim free name" : "Register", async () => {
@@ -150,6 +154,35 @@ function registerPanel(x) {
       const [, network, asset, standard] = mode.split(":");
       const inv = await api("POST", "/v1/invoices", { label, owner, years: yrs, network, asset, standard });
       navigate(`/invoice/${inv.id}`);
+      return;
+    }
+    if (mode === "sponsored") {
+      const names = ["Sign (free)", "Commit", "Wait", "Register"];
+      mount(stepsBox, steps(names, 0));
+      const { message } = await api("GET", `/v1/free-claims/sponsor-message?label=${encodeURIComponent(label)}&owner=${owner}`);
+      const signature = await wallet.signer.signMessage(message);
+      mount(stepsBox, steps(names, 1));
+      let claim = await api("POST", "/v1/free-claims/sponsored", { label, owner, signature });
+      while (claim.status !== "completed" && claim.status !== "failed") {
+        if (claim.status === "committed") {
+          mount(stepsBox, steps(names, 2));
+          const waitLeft = Math.max(0, (claim.readyAt || 0) - Math.floor(Date.now() / 1000));
+          mount(out, h("div", { class: "muted" }, waitLeft > 0 ? `Waiting ${waitLeft}s for the commit-reveal delay (prevents front-running)...` : "Finishing up..."));
+        } else if (claim.status === "registering") {
+          mount(stepsBox, steps(names, 3));
+          mount(out, h("div", { class: "muted" }, "Registering (we're paying the gas)..."));
+        }
+        await sleep(2000);
+        claim = await api("GET", `/v1/free-claims/sponsored/${claim.id}`);
+      }
+      mount(out);
+      if (claim.status === "failed") { mount(out, alert("bad", claim.error || "Sponsored claim failed. Try again, or use “Free tier” instead.")); return; }
+      mount(stepsBox, steps(names, 4));
+      const { info } = await contracts(false);
+      const l = explorerTx(info, claim.registerTx);
+      mount(out, alert("ok", h("b", null, `${x.name} is yours.`), " You paid nothing — we covered the gas. ", l ? h("a", { href: l, target: "_blank", rel: "noopener" }, "View transaction") : h("span", { class: "mono" }, claim.registerTx),
+        h("div", { style: "margin-top:8px" }, h("a", { class: "btn small", href: "/names" }, "Add your addresses"))));
+      toast(`${x.name} registered — gas-free`);
       return;
     }
     const { registrar, info, erc20 } = await contracts();

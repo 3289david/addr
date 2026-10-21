@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes.ts";
 import { startIndexer } from "./indexer.ts";
 import { startWebhookWorker } from "./webhooks.ts";
 import { startPaymentsWorker } from "./payments.ts";
+import { startSponsorWorker } from "./sponsor.ts";
 import { startMailWorker } from "./mail.ts";
 import { startRetention } from "./retention.ts";
 import { deployment, operatorAddress } from "./chain.ts";
@@ -19,6 +20,7 @@ server.listen(config.port, config.host, () => {
 startIndexer();
 startWebhookWorker();
 startPaymentsWorker();
+startSponsorWorker();
 startMailWorker();
 startRetention();
 

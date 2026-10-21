@@ -177,6 +177,24 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE UNIQUE INDEX IF NOT EXISTS invoices_txid ON invoices(network, txid) WHERE txid IS NOT NULL;
 CREATE INDEX IF NOT EXISTS invoices_status ON invoices(status);
 
+-- sponsored (gasless) free-name claims: the operator pays gas on the owner's behalf, so the owner never
+-- needs any ETH. Owner just signs a free off-chain message proving they control the address.
+CREATE TABLE IF NOT EXISTS sponsored_claims (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  secret TEXT NOT NULL,          -- commit-reveal secret, held server-side only (never shown to the client)
+  status TEXT NOT NULL,          -- pending | committed | registering | completed | failed
+  commit_tx TEXT,
+  committed_at INTEGER,
+  register_tx TEXT,
+  error TEXT,
+  created INTEGER NOT NULL,
+  updated INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sponsored_claims_owner ON sponsored_claims(owner);
+CREATE INDEX IF NOT EXISTS sponsored_claims_status ON sponsored_claims(status);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,

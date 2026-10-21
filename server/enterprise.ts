@@ -197,7 +197,7 @@ export async function expiringNamespaces(tenantId: string, withinDays = 60) {
 
 // -------------------------------------------------------------- free-claim vouchers
 
-function rateCheck(bucket: string, limit: number, windowSec = 86400) {
+export function rateCheck(bucket: string, limit: number, windowSec = 86400) {
   const t = now();
   db.prepare("DELETE FROM rate_events WHERE ts < ?").run(t - 2 * 86400);
   const c = (db.prepare("SELECT COUNT(*) AS c FROM rate_events WHERE bucket = ? AND ts > ?").get(bucket, t - windowSec) as any).c;

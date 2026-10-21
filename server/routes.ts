@@ -17,6 +17,7 @@ import {
   listIssued, namespaceStatus, removeIssued, setRecordsForIssued,
 } from "./enterprise.ts";
 import { createInvoice, finalize, paymentMethods, publicInvoice, submitPayment, usdPrices } from "./payments.ts";
+import { publicSponsoredClaim, requestSponsoredClaim, sponsorClaimMessage } from "./sponsor.ts";
 import { assertSafeWebhookUrl, EVENT_TYPES, requeue } from "./webhooks.ts";
 import { indexOnce } from "./indexer.ts";
 import { accountUsage, createAccountKey, deleteAccount, exportAccount, isAdminEmail, listKeys, logout, requestLogin, revokeKey, verifyCode, verifyToken } from "./accounts.ts";
@@ -156,6 +157,9 @@ export function registerRoutes() {
   });
 
   route("POST", "/v1/free-claims", async (c) => issueFreeVoucher(c.req, str(c.body?.label, "label"), str(c.body?.owner, "owner")));
+  route("GET", "/v1/free-claims/sponsor-message", (c) => ({ message: sponsorClaimMessage(str(c.query.get("label") ?? "", "label"), str(c.query.get("owner") ?? "", "owner")) }));
+  route("POST", "/v1/free-claims/sponsored", async (c) => requestSponsoredClaim(c.req, str(c.body?.label, "label"), str(c.body?.owner, "owner"), str(c.body?.signature, "signature")));
+  route("GET", "/v1/free-claims/sponsored/:id", async (c) => publicSponsoredClaim(c.params.id));
 
   // --------------------------------------------------------------- keys + usage
   // --------------------------------------------------------------- sign-in (email, passwordless)
