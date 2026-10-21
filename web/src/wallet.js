@@ -121,26 +121,34 @@ export function openConnect() {
     const manualBox = h("div", { class: "hide stack" });
     const manualInput = h("input", { placeholder: "0x... your EVM address", spellcheck: "false", autocomplete: "off", value: store.get("manualAddress", "") });
     const manualErr = h("div", { class: "bad help" });
+    const wcBox = h("div", { class: "hide stack" });
     const m = modal({
       title: "Connect a wallet",
       body: h("div", { class: "stack" },
         h("p", { class: "muted", style: "margin:0" }, "Nothing is connected until you pick an option. ADDR never sees your private keys."),
         list,
         walletConnectEnabled()
-          ? h("button", { class: "option", type: "button", onclick: async () => {
-              try { await connectWalletConnect(); toast(`Connected to ${wallet.label}`); m.close(true); } catch (e) { if (e.code !== "CANCELLED") toast(e.message, "bad"); }
-            } },
+          ? h("button", { class: "option", type: "button", onclick: () => { wcBox.classList.toggle("hide"); manualBox.classList.add("hide"); } },
               h("span", { class: "ico" }, icon("phone", 22)),
               h("span", null, h("div", { class: "t" }, "Connect with a mobile wallet app"), h("div", { class: "d" }, "Scan a QR code, or tap to open your wallet app directly on your phone.")))
           : h("div", { class: "option", style: "cursor:default;opacity:.6" },
               h("span", { class: "ico" }, icon("phone", 22)),
               h("span", null, h("div", { class: "t" }, "Connect with a mobile wallet app"), h("div", { class: "d" }, "Not configured on this deployment yet."))),
-        h("button", { class: "option", type: "button", onclick: () => { manualBox.classList.toggle("hide"); manualInput.focus(); } },
+        wcBox,
+        h("button", { class: "option", type: "button", onclick: () => { manualBox.classList.toggle("hide"); wcBox.classList.add("hide"); manualInput.focus(); } },
           h("span", { class: "ico" }, icon("key", 22)),
           h("span", null, h("div", { class: "t" }, "Enter address manually"), h("div", { class: "d" }, "Use any wallet or hardware device. Transactions are shown as fields to copy; you send them yourself and paste the hash."))),
         manualBox),
     });
     m.onClose = (v) => resolve(!!v);
+    wcBox.append(
+      h("ol", { class: "muted", style: "margin:0;padding-left:20px;display:grid;gap:6px;font-size:13.5px" },
+        h("li", null, "Install a wallet app that supports WalletConnect, e.g. MetaMask, Trust Wallet, Rainbow or Coinbase Wallet (most do)."),
+        h("li", null, "Tap “Show QR code” below. On a computer: open your wallet app, find Scan / WalletConnect, and scan it with your phone. On a phone: pick your wallet from the list that opens — it switches to the app directly, no scanning needed."),
+        h("li", null, "Approve the connection request in your wallet app. Nothing is signed or sent yet — connecting only shares your address.")),
+      btn("Show QR code", async () => {
+        try { await connectWalletConnect(); toast(`Connected to ${wallet.label}`); m.close(true); } catch (e) { if (e.code !== "CANCELLED") toast(e.message, "bad"); }
+      }, "block"));
     manualBox.append(field("Your EVM address", manualInput), manualErr,
       alert("info", "Manual mode proves nothing about ownership by itself: reading works for any address, and every change you make is only valid if the wallet that sends it controls this address."),
       btn("Continue", async () => {
