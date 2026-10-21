@@ -38,7 +38,7 @@ export function requestLogin(req: IncomingMessage, rawEmail: unknown, next?: str
   rl(`login:ip:${ip}`, config.loginIpPerHour, 3600, "Too many sign-in attempts from this network. Try again later.");
   rl("login:global", 600, 3600, "Sign-in is busy. Try again shortly.");
 
-  db.prepare("UPDATE login_codes SET consumed = 1 WHERE email = ? AND consumed = 0").run(email); // only the newest code works
+  db.prepare("UPDATE login_codes SET consumed = 2 WHERE email = ? AND consumed = 0").run(email); // only the newest code works; 2 = superseded (not the same as 1 = actually used)
   const code = String(crypto.randomInt(100000, 1000000));
   const token = crypto.randomBytes(32).toString("base64url");
   const id = crypto.randomBytes(8).toString("hex");
@@ -112,8 +112,11 @@ export function verifyCode(req: IncomingMessage, res: ServerResponse, rawEmail: 
   const code = String(rawCode ?? "").replace(/\s/g, "");
   if (!/^\d{6}$/.test(code)) throw new AddrError("invalid_code", "enter the 6 digit code from the email", 422);
   rl(`verify:ip:${sha256(clientIp(req) + "|" + new Date().toISOString().slice(0, 10)).slice(0, 24)}`, 40, 3600, "Too many attempts. Try again later.");
-  const row = db.prepare("SELECT * FROM login_codes WHERE email = ? AND consumed = 0 ORDER BY created DESC LIMIT 1").get(email) as any;
-  if (!row || row.expires < now()) throw new AddrError("code_expired", "this code has expired or was already used; request a new one", 401);
+  const row = db.prepare("SELECT * FROM login_codes WHERE email = ? ORDER BY created DESC LIMIT 1").get(email) as any;
+  if (!row) throw new AddrError("code_expired", "no sign-in code was requested for this address; request a new one", 401);
+  if (row.consumed === 1) throw new AddrError("code_used", "this code was already used to sign in", 401);
+  if (row.consumed === 2) throw new AddrError("code_superseded", "a newer sign-in email was requested since this one was sent; use the code from your most recent email, or request a new one", 401);
+  if (row.expires < now()) throw new AddrError("code_expired", "this code has expired; request a new one", 401);
   if (row.attempts >= 5) {
     db.prepare("UPDATE login_codes SET consumed = 1 WHERE id = ?").run(row.id);
     throw new AddrError("too_many_attempts", "too many wrong codes; request a new one", 429);
@@ -128,8 +131,11 @@ export function verifyCode(req: IncomingMessage, res: ServerResponse, rawEmail: 
 export function verifyToken(req: IncomingMessage, res: ServerResponse, token: unknown) {
   if (typeof token !== "string" || token.length < 20 || token.length > 100) throw new AddrError("invalid_token", "invalid sign-in link", 422);
   rl(`verify:ip:${sha256(clientIp(req) + "|" + new Date().toISOString().slice(0, 10)).slice(0, 24)}`, 40, 3600, "Too many attempts. Try again later.");
-  const row = db.prepare("SELECT * FROM login_codes WHERE token_hash = ? AND consumed = 0").get(sha256(token)) as any;
-  if (!row || row.expires < now()) throw new AddrError("code_expired", "this sign-in link has expired or was already used", 401);
+  const row = db.prepare("SELECT * FROM login_codes WHERE token_hash = ?").get(sha256(token)) as any;
+  if (!row) throw new AddrError("invalid_token", "invalid sign-in link", 422);
+  if (row.consumed === 1) throw new AddrError("code_used", "this sign-in link was already used", 401);
+  if (row.consumed === 2) throw new AddrError("code_superseded", "a newer sign-in email was requested since this link was sent; open your most recent email, or request a new one", 401);
+  if (row.expires < now()) throw new AddrError("code_expired", "this sign-in link has expired; request a new one", 401);
   return finish(req, res, row.id, row.email);
 }
 
