@@ -13,7 +13,17 @@ export const walletConnectEnabled = () => !!WC_PROJECT_ID;
 export const wallet = { mode: null, address: null, chainId: null, label: "", provider: null, signer: null, listeners: [], raw: null };
 const emitChange = () => wallet.listeners.forEach((f) => f());
 const CANCEL = () => Object.assign(new Error("Request cancelled"), { code: "CANCELLED" });
-const COMMON_CHAINS = [1, 137, 8453, 42161, 10, 56]; // mainnet, polygon, base, arbitrum, optimism, bnb — so a mobile wallet always has something to approve
+// Every major EVM mainnet, so a WalletConnect session can be used on whichever network the user is
+// actually on, not just a handful. WalletConnect negotiates this over the encrypted relay after pairing,
+// not in the QR code itself, so a long list doesn't make the QR bigger or slower to scan.
+const COMMON_CHAINS = [
+  1, 10, 25, 56, 100, 137, 146, 169, 196, 204, 250, 288, 324, 1030, 1088, 1101, 1116, 1284, 1285,
+  1329, 2222, 5000, 7000, 7700, 8217, 8453, 9001, 13371, 34443, 42161, 42170, 42220, 43114,
+  59144, 60808, 81457, 167000, 534352, 7777777,
+]; // eth, optimism, cronos, bnb, gnosis, polygon, sonic, manta pacific, x layer, opbnb, fantom, boba,
+   // zksync era, conflux espace, metis, polygon zkevm, core, moonbeam, moonriver, sei, kava, mantle,
+   // zetachain, canto, kaia, base, evmos, immutable zkevm, mode, arbitrum one, arbitrum nova, celo,
+   // avalanche, linea, bob, blast, taiko, scroll, zora
 
 export const isConnected = () => !!wallet.address;
 export const canSign = () => wallet.mode === "injected" || wallet.mode === "manual";
@@ -72,19 +82,21 @@ export async function connectWalletConnect() {
     showQrModal: true,
     metadata: { name: "ADDR", description: "Human-readable Web3 names", url: location.origin, icons: [location.origin + "/icon.png"] },
   });
+  let accounts;
   try {
-    await provider.enable();
+    accounts = await provider.enable(); // eth_requestAccounts-equivalent: resolves with the account list directly
   } catch (e) {
     provider.events?.removeAllListeners?.();
     throw e.message?.includes("User rejected") || e.message?.includes("rejected") ? CANCEL() : e;
   }
-  if (!provider.accounts?.length) throw new Error("The wallet did not share an account");
+  accounts = accounts?.length ? accounts : provider.accounts; // some wallets only populate provider.accounts, not enable()'s return value
+  if (!accounts?.length) throw new Error("The wallet did not share an account");
   wcProvider = provider;
   wallet.raw = provider;
   wallet.provider = new BrowserProvider(provider, "any");
+  wallet.address = getAddress(accounts[0]);
   wallet.signer = await wallet.provider.getSigner();
-  wallet.address = getAddress(await wallet.signer.getAddress());
-  wallet.chainId = Number((await wallet.provider.getNetwork()).chainId);
+  wallet.chainId = provider.chainId ? Number(provider.chainId) : Number((await wallet.provider.getNetwork()).chainId);
   wallet.mode = "injected";
   wallet.label = "Mobile wallet";
   provider.on("accountsChanged", (a) => { if (wallet.raw === provider) { if (!a.length) disconnect(); else { wallet.address = getAddress(a[0]); emitChange(); } } });
