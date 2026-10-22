@@ -383,7 +383,7 @@ async function nameInfoOnChain(input) {
   const node = namehash(name);
   const parent = parentName(name);
   const [statusN, activeOwner, rawOwner, res] = await Promise.all([
-    registry.statusOf(node), registry.ownerOf(node), registry.rawOwner(node), registry.resolverOf(node),
+    registry.statusOf(node), registry["ownerOf(bytes32)"](node), registry.rawOwner(node), registry.resolverOf(node),
   ]);
   let status;
   switch (Number(statusN)) {

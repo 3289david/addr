@@ -25,7 +25,7 @@ export async function names(root) {
     for (const ev of events) {
       const node = ev.args[0];
       const label = ev.args[1];
-      const owner = await registry.ownerOf(node).catch(() => null);
+      const owner = await registry["ownerOf(bytes32)"](node).catch(() => null);
       if (owner && owner.toLowerCase() === wallet.address.toLowerCase()) rows.push({ name: `${label}.addr`, node });
     }
     mount(mine, rows.length

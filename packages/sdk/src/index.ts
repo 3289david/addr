@@ -187,7 +187,7 @@ export class AddrChainResolver {
     const n = normalizeName(name);
     const node = namehash(n);
     const s = Number(await this.registry.statusOf(node));
-    return { name: n, node, status: (["available", "active", "grace", "expired"] as const)[s], owner: s === 1 ? ((await this.registry.ownerOf(node)) as string) : null };
+    return { name: n, node, status: (["available", "active", "grace", "expired"] as const)[s], owner: s === 1 ? ((await this.registry["ownerOf(bytes32)"](node)) as string) : null };
   }
 
   async resolve(name: string, opts: ResolveOptions): Promise<Pick<ResolveResult, "name" | "node" | "network" | "asset" | "standard" | "address" | "source" | "fallbackWarning" | "version" | "updatedAt" | "explorer">> {

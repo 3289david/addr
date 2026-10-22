@@ -30,7 +30,7 @@ export async function getNameInfo(input: string): Promise<NameInfo> {
   const parent = parentName(name);
   const [statusN, activeOwner, rawOwner, res, exp, lock] = await Promise.all([
     registry.statusOf(node) as Promise<bigint>,
-    registry.ownerOf(node) as Promise<string>,
+    registry["ownerOf(bytes32)"](node) as Promise<string>,
     registry.rawOwner(node) as Promise<string>,
     registry.resolverOf(node) as Promise<string>,
     registry.expiresAt(node) as Promise<bigint>,

@@ -5,6 +5,7 @@ const DAY = 86400;
 const YEAR = 365 * DAY;
 const lh = (s) => ethers.keccak256(ethers.toUtf8Bytes(s));
 const nh = (name) => name.split(".").reverse().reduce((n, l) => ethers.keccak256(ethers.concat([n, lh(l)])), ethers.ZeroHash);
+const bytes32FromTokenId = (tokenId) => ethers.toBeHex(tokenId, 32);
 
 async function increase(sec) {
   await network.provider.send("evm_increaseTime", [sec]);
@@ -78,7 +79,7 @@ describe("ADDR contracts", function () {
       const bad = await voucherFor(alice.address, "other");
       await expectRevert(commitAndRegister(alice, "heelo", alice.address, 1, ethers.ZeroAddress, bad), "BadVoucher");
       await (await commitAndRegister(alice, "heelo", alice.address, 1, ethers.ZeroAddress, v)).wait();
-      assert.equal(await registry.ownerOf(nh("heelo.addr")), alice.address);
+      assert.equal(await registry["ownerOf(bytes32)"](nh("heelo.addr")), alice.address);
       assert.equal(await registrar.freeClaimed(alice.address), true);
       // second 5+ name is paid ($5/yr): free path must not apply
       const [perYear, free] = await registrar.priceFor("second", alice.address);
@@ -89,7 +90,7 @@ describe("ADDR contracts", function () {
       const before = await usdc.balanceOf(treasury.address);
       await (await commitAndRegister(alice, "second", alice.address, 2, await usdc.getAddress())).wait();
       assert.equal((await usdc.balanceOf(treasury.address)) - before, 10_000_000n);
-      assert.equal(await registry.ownerOf(nh("second.addr")), alice.address);
+      assert.equal(await registry["ownerOf(bytes32)"](nh("second.addr")), alice.address);
     });
 
     it("free benefit is not replicated by transferring the free name", async () => {
@@ -110,7 +111,7 @@ describe("ADDR contracts", function () {
       const rc = await tx.wait();
       const paid = (await ethers.provider.getBalance(treasury.address)) - tBefore;
       assert.equal(paid, need);
-      assert.equal(await registry.ownerOf(nh("lee.addr")), bob.address);
+      assert.equal(await registry["ownerOf(bytes32)"](nh("lee.addr")), bob.address);
       const ev = rc.logs.map((l) => { try { return registrar.interface.parseLog(l); } catch { return null; } }).find((e) => e && e.name === "NameRegistered");
       assert.equal(ev.args.usdPaid, 50_000_000n);
     });
@@ -138,12 +139,12 @@ describe("ADDR contracts", function () {
       await registrar.setReserved([lh("admin")], true);
       await expectRevert(commitAndRegister(alice, "admin", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "admin")), "ReservedName");
       await registrar.mintReserved("admin", admin.address, 1);
-      assert.equal(await registry.ownerOf(nh("admin.addr")), admin.address);
+      assert.equal(await registry["ownerOf(bytes32)"](nh("admin.addr")), admin.address);
       // existing user name cannot be taken: reserving it later does not move it, and re-mint fails
       await (await commitAndRegister(alice, "mine1", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "mine1"))).wait();
       await registrar.setReserved([lh("mine1")], true);
       await expectRevert(registrar.mintReserved("mine1", admin.address, 1), "NameUnavailable");
-      assert.equal(await registry.ownerOf(nh("mine1.addr")), alice.address);
+      assert.equal(await registry["ownerOf(bytes32)"](nh("mine1.addr")), alice.address);
       // admin has no direct way to change ownership
       await expectRevert(registry.connect(admin).transfer(nh("mine1.addr"), admin.address), "NotAuthorised");
     });
@@ -162,14 +163,14 @@ describe("ADDR contracts", function () {
       await (await resolver.connect(alice)["setAddr(bytes32,address)"](node, alice.address)).wait();
       assert.equal(await resolver["addr(bytes32)"](node), alice.address);
       await increase(YEAR + DAY); // expired, in grace
-      assert.equal(await registry.ownerOf(node), ethers.ZeroAddress);
+      assert.equal(await registry["ownerOf(bytes32)"](node), ethers.ZeroAddress);
       assert.equal(await resolver["addr(bytes32)"](node), ethers.ZeroAddress);
       assert.equal(await registry.statusOf(node), 2n);
       await expectRevert(resolver.connect(alice)["setAddr(bytes32,address)"](node, alice.address), "NotAuthorised");
       await expectRevert(commitAndRegister(bob, "expiring", bob.address, 1, ethers.ZeroAddress, await voucherFor(bob.address, "expiring")), "NameUnavailable");
       // renew inside grace, free
       await (await registrar.connect(carol).renew("expiring", 1, ethers.ZeroAddress)).wait();
-      assert.equal(await registry.ownerOf(node), alice.address);
+      assert.equal(await registry["ownerOf(bytes32)"](node), alice.address);
       assert.equal(await resolver["addr(bytes32)"](node), alice.address); // records survive a renewal in grace
     });
     it("after grace a new owner gets a clean slate", async () => {
@@ -179,7 +180,7 @@ describe("ADDR contracts", function () {
       await increase(YEAR + 31 * DAY);
       assert.equal(await registry.statusOf(node), 3n);
       await (await commitAndRegister(bob, "expiring", bob.address, 1, ethers.ZeroAddress, await voucherFor(bob.address, "expiring"))).wait();
-      assert.equal(await registry.ownerOf(node), bob.address);
+      assert.equal(await registry["ownerOf(bytes32)"](node), bob.address);
       assert.equal(await resolver["addr(bytes32)"](node), ethers.ZeroAddress);
       assert.equal(await resolver.text(node, "url"), "");
     });
@@ -264,7 +265,7 @@ describe("ADDR contracts", function () {
       await expectRevert(registry.connect(alice).lock(node, now + 5 * DAY), "bad lock");
       await increase(11 * DAY);
       await registry.connect(alice).transfer(node, bob.address);
-      assert.equal(await registry.ownerOf(node), bob.address);
+      assert.equal(await registry["ownerOf(bytes32)"](node), bob.address);
     });
     it("guardian recovery respects the delay and the owner can cancel", async () => {
       await expectRevert(registry.connect(alice).setRecovery(node, guardian.address, 3600), "BadRecovery");
@@ -278,7 +279,7 @@ describe("ADDR contracts", function () {
       await registry.connect(guardian).startRecovery(node, bob.address);
       await increase(3 * DAY + 5);
       await registry.connect(guardian).executeRecovery(node);
-      assert.equal(await registry.ownerOf(node), bob.address);
+      assert.equal(await registry["ownerOf(bytes32)"](node), bob.address);
       assert.equal((await registry.recoveryPolicy(node)).guardian, ethers.ZeroAddress); // policy resets for new owner
     });
   });
@@ -297,7 +298,7 @@ describe("ADDR contracts", function () {
       const eth = resolver.interface.encodeFunctionData("setAddr(bytes32,address)", [node, bob.address]);
       const btc = resolver.interface.encodeFunctionData("setAddr(bytes32,uint256,bytes)", [node, 0, "0x0014" + "33".repeat(20)]);
       await registry.connect(relayer).createSubname(parent, "bob", bob.address, await resolver.getAddress(), [eth, btc]);
-      assert.equal(await registry.ownerOf(node), bob.address);
+      assert.equal(await registry["ownerOf(bytes32)"](node), bob.address);
       assert.equal(await resolver["addr(bytes32)"](node), bob.address);
       assert.equal(await resolver["addr(bytes32,uint256)"](node, 0), "0x0014" + "33".repeat(20));
       // the relayer does NOT own the customer's subname and cannot rewrite its records
@@ -321,20 +322,20 @@ describe("ADDR contracts", function () {
       await registry.connect(bob).burnParentControl(one);
       await expectRevert(registry.connect(relayer).removeSubname(one), "ParentControlGone");
       await registry.connect(alice).removeSubname(two); // parent owner may remove non-sovereign
-      assert.equal(await registry.ownerOf(two), ethers.ZeroAddress);
+      assert.equal(await registry["ownerOf(bytes32)"](two), ethers.ZeroAddress);
       await increase(YEAR + DAY);
-      assert.equal(await registry.ownerOf(one), ethers.ZeroAddress); // parent expired
+      assert.equal(await registry["ownerOf(bytes32)"](one), ethers.ZeroAddress); // parent expired
     });
     it("a re-registered parent does not resurrect old subnames", async () => {
       await registry.connect(relayer).createSubname(parent, "ghost", bob.address, ethers.ZeroAddress, []);
       await increase(YEAR + 31 * DAY);
       await (await commitAndRegister(carol, "wallet", carol.address, 1, ethers.ZeroAddress, await voucherFor(carol.address, "wallet"))).wait();
-      assert.equal(await registry.ownerOf(nh("ghost.wallet.addr")), ethers.ZeroAddress);
+      assert.equal(await registry["ownerOf(bytes32)"](nh("ghost.wallet.addr")), ethers.ZeroAddress);
     });
     it("subname owner can transfer a sovereign subname out", async () => {
       await registry.connect(relayer).createSubname(parent, "move", bob.address, await resolver.getAddress(), []);
       await registry.connect(bob).transfer(nh("move.wallet.addr"), carol.address);
-      assert.equal(await registry.ownerOf(nh("move.wallet.addr")), carol.address);
+      assert.equal(await registry["ownerOf(bytes32)"](nh("move.wallet.addr")), carol.address);
     });
   });
 
@@ -342,13 +343,117 @@ describe("ADDR contracts", function () {
     it("registers once per payment ref, honours caps, cannot touch reserved or taken names", async () => {
       const ref = ethers.id("btc:tx1");
       await registrar.connect(op).registerPaid("lonely", alice.address, 2, ref);
-      assert.equal(await registry.ownerOf(nh("lonely.addr")), alice.address);
+      assert.equal(await registry["ownerOf(bytes32)"](nh("lonely.addr")), alice.address);
       await expectRevert(registrar.connect(op).registerPaid("lonely2", alice.address, 1, ref), "RefUsed");
       await expectRevert(registrar.connect(alice).registerPaid("hacked", alice.address, 1, ethers.id("z")), "NotOperator");
       await expectRevert(registrar.connect(op).registerPaid("lonely", bob.address, 1, ethers.id("x")), "NameUnavailable");
       await registrar.setOperatorDailyCap(1);
       await expectRevert(registrar.connect(op).registerPaid("capped", alice.address, 1, ethers.id("y")), "OperatorCapReached");
       await registrar.connect(op).renewPaid("lonely", 1, ethers.id("renew")).catch((e) => assert.ok(String(e.message).includes("OperatorCapReached")));
+    });
+  });
+
+  describe("ERC-721 compliance (names as NFTs)", () => {
+    const ERC165 = "0x01ffc9a7", ERC721 = "0x80ac58cd", ERC721Metadata = "0x5b5e139f";
+
+    it("declares the right interfaces and metadata", async () => {
+      assert.equal(await registry.supportsInterface(ERC165), true);
+      assert.equal(await registry.supportsInterface(ERC721), true);
+      assert.equal(await registry.supportsInterface(ERC721Metadata), true);
+      assert.equal(await registry.supportsInterface("0xffffffff"), false);
+      assert.equal(await registry.name(), "ADDR Names");
+      assert.equal(await registry.symbol(), "ADDR");
+    });
+
+    it("balanceOf/ownerOf(uint256) agree with the node-keyed API after register()", async () => {
+      await commitAndRegister(alice, "nifty", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "nifty"));
+      const node = nh("nifty.addr");
+      const tokenId = BigInt(node);
+      assert.equal(await registry.balanceOf(alice.address), 1n);
+      assert.equal(await registry["ownerOf(uint256)"](tokenId), alice.address);
+      assert.equal(await registry["ownerOf(bytes32)"](node), alice.address);
+      await expectRevert(registry.balanceOf(ethers.ZeroAddress), "");
+    });
+
+    it("ownerOf(uint256) reverts for an unregistered/inactive token (unlike ownerOf(bytes32))", async () => {
+      const tokenId = BigInt(nh("totallyunregistered.addr"));
+      await expectRevert(registry["ownerOf(uint256)"](tokenId), "");
+      assert.equal(await registry["ownerOf(bytes32)"](bytes32FromTokenId(tokenId)), ethers.ZeroAddress);
+    });
+
+    it("transferFrom moves ownership, updates balances both ways, clears approval, and the legacy transfer() API sees the exact same result", async () => {
+      await commitAndRegister(alice, "movable", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "movable"));
+      const node = nh("movable.addr");
+      const tokenId = BigInt(node);
+      await registry.connect(alice).approve(carol.address, tokenId);
+      assert.equal(await registry.getApproved(tokenId), carol.address);
+      await registry.connect(carol).transferFrom(alice.address, bob.address, tokenId);
+      assert.equal(await registry["ownerOf(uint256)"](tokenId), bob.address);
+      assert.equal(await registry["ownerOf(bytes32)"](node), bob.address);
+      assert.equal(await registry.balanceOf(alice.address), 0n);
+      assert.equal(await registry.balanceOf(bob.address), 1n);
+      assert.equal(await registry.getApproved(tokenId), ethers.ZeroAddress); // cleared on transfer
+      // now move it back using the ORIGINAL node-keyed transfer() — must update the ERC-721 view too
+      await registry.connect(bob).transfer(node, alice.address);
+      assert.equal(await registry["ownerOf(uint256)"](tokenId), alice.address);
+      assert.equal(await registry.balanceOf(alice.address), 1n);
+      assert.equal(await registry.balanceOf(bob.address), 0n);
+    });
+
+    it("setApprovalForAll lets an operator transferFrom, and respects lock()", async () => {
+      await commitAndRegister(alice, "opname", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "opname"));
+      const node = nh("opname.addr");
+      const tokenId = BigInt(node);
+      await expectRevert(registry.connect(carol).transferFrom(alice.address, carol.address, tokenId), "");
+      await registry.connect(alice).setApprovalForAll(carol.address, true);
+      await registry.connect(alice).lock(node, (await ethers.provider.getBlock("latest")).timestamp + DAY);
+      await expectRevert(registry.connect(carol).transferFrom(alice.address, carol.address, tokenId), "NameLockedError");
+    });
+
+    it("safeTransferFrom checks onERC721Received on the recipient", async () => {
+      await commitAndRegister(alice, "safeone", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "safeone"));
+      const tokenId = BigInt(nh("safeone.addr"));
+      const accepting = await (await ethers.getContractFactory("MockERC721Receiver")).deploy(true);
+      const rejecting = await (await ethers.getContractFactory("MockERC721Receiver")).deploy(false);
+      await registry.connect(alice)["safeTransferFrom(address,address,uint256)"](alice.address, await accepting.getAddress(), tokenId);
+      assert.equal(await registry["ownerOf(uint256)"](tokenId), await accepting.getAddress());
+      await commitAndRegister(bob, "safetwo", bob.address, 1, ethers.ZeroAddress, await voucherFor(bob.address, "safetwo"));
+      const tokenId2 = BigInt(nh("safetwo.addr"));
+      await expectRevert(
+        registry.connect(bob)["safeTransferFrom(address,address,uint256)"](bob.address, await rejecting.getAddress(), tokenId2),
+        "",
+      );
+    });
+
+    it("re-registering an expired name re-mints correctly: old owner's balance drops, new owner's rises", async () => {
+      await commitAndRegister(alice, "willexpire", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "willexpire"));
+      assert.equal(await registry.balanceOf(alice.address), 1n);
+      await increase(YEAR + 31 * DAY); // past grace period
+      await commitAndRegister(bob, "willexpire", bob.address, 1, ethers.ZeroAddress, await voucherFor(bob.address, "willexpire"));
+      assert.equal(await registry.balanceOf(alice.address), 0n);
+      assert.equal(await registry.balanceOf(bob.address), 1n);
+      assert.equal(await registry["ownerOf(uint256)"](BigInt(nh("willexpire.addr"))), bob.address);
+    });
+
+    it("subnames are tokens too: createSubname mints, removeSubname burns", async () => {
+      await commitAndRegister(alice, "parentname", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "parentname"));
+      const parent = nh("parentname.addr");
+      await registry.connect(alice).createSubname(parent, "sub", bob.address, ethers.ZeroAddress, []);
+      const subNode = nh("sub.parentname.addr");
+      const subId = BigInt(subNode);
+      assert.equal(await registry["ownerOf(uint256)"](subId), bob.address);
+      assert.equal(await registry.balanceOf(bob.address), 1n);
+      await registry.connect(bob).removeSubname(subNode);
+      await expectRevert(registry["ownerOf(uint256)"](subId), "");
+      assert.equal(await registry.balanceOf(bob.address), 0n);
+    });
+
+    it("tokenURI reflects baseTokenURI, settable by the owner", async () => {
+      await commitAndRegister(alice, "metaname", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "metaname"));
+      const tokenId = BigInt(nh("metaname.addr"));
+      await registry.connect(admin).setBaseTokenURI("https://addr.krl.kr/v1/nft/");
+      assert.equal(await registry.tokenURI(tokenId), `https://addr.krl.kr/v1/nft/${tokenId}`);
+      await expectRevert(registry.connect(alice).setBaseTokenURI("https://evil.example/"), "OwnableUnauthorizedAccount");
     });
   });
 

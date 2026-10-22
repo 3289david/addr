@@ -23,6 +23,7 @@ import { indexOnce } from "./indexer.ts";
 import { accountUsage, createAccountKey, deleteAccount, exportAccount, isAdminEmail, listKeys, logout, requestLogin, revokeKey, verifyCode, verifyToken } from "./accounts.ts";
 import { mailDnsStatus } from "./mail.ts";
 import { runRetention } from "./retention.ts";
+import { nftMetadata, nftImageSvg, nodeFromTokenId } from "./nft.ts";
 import type { Principal } from "./auth.ts";
 
 function needSession(p: Principal): string {
@@ -495,6 +496,18 @@ export function registerRoutes() {
     requireAdmin(c.req, c.principal);
     return indexOnce();
   });
+
+  // ------------------------------------------------------------------- NFT
+  // registry.tokenURI(tokenId) points here. tokenId = uint256(node), the same identifier the
+  // registry already uses internally — see AddrRegistry.sol and docs on the ERC-721 surface.
+  route("GET", "/v1/nft/:tokenId", (c) => nftMetadata(c.params.tokenId));
+  route("GET", "/v1/nft/:tokenId/image.svg", (c) => {
+    const node = nodeFromTokenId(c.params.tokenId);
+    const row = db.prepare("SELECT name FROM names WHERE node = ?").get(node) as { name: string } | undefined;
+    c.res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8", "cache-control": "public, max-age=300" });
+    c.res.end(nftImageSvg(row?.name || "?.addr"));
+  });
+
   void freeSigner; void getNetwork; void registry;
 }
 

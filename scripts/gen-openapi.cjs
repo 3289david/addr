@@ -95,6 +95,8 @@ const paths = {
   "/v1/admin/tenants/{id}": { patch: { summary: "Change plan", security: admin, parameters: [p("id", "tenant id")], requestBody: body({ plan: "string", days: "integer" }, ["plan"]), responses: ok() } },
   "/v1/admin/tenants/{id}/keys": { post: { summary: "Issue an API key", security: admin, parameters: [p("id", "tenant id")], responses: created } },
   "/v1/admin/reindex": { post: { summary: "Run an indexer pass", security: admin, responses: ok() } },
+  "/v1/nft/{tokenId}": { get: { summary: "ERC-721 metadata for a name (tokenId = uint256(node))", parameters: [p("tokenId", "decimal token id")], responses: ok() } },
+  "/v1/nft/{tokenId}/image.svg": { get: { summary: "ERC-721 image for a name", parameters: [p("tokenId", "decimal token id")], responses: ok() } },
 };
 
 const spec = {

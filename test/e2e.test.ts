@@ -117,7 +117,7 @@ test("free claim -> on-chain commit/register -> resolution with every chain reco
   const v = await api("POST", "/v1/free-claims", { label: aliceLabel, owner });
   assert.equal(v.status, 200, JSON.stringify(v.body));
   await registerOnChain(alice, aliceLabel, v.body);
-  assert.equal(await registry.ownerOf(namehash(aliceLabel + ".addr")), owner);
+  assert.equal(await registry["ownerOf(bytes32)"](namehash(aliceLabel + ".addr")), owner);
 
   // second free claim for the same wallet is refused by the API and by the contract
   const again = await api("POST", "/v1/free-claims", { label: rnd(8), owner });
@@ -286,7 +286,7 @@ test("enterprise: namespace claim, relayer-issued subnames with atomic records, 
   assert.equal((await api("POST", "/v1/enterprise/subnames", { ...body, label: "other" }, idem)).status, 422); // key reuse with different body
 
   const full = `cust1.${ns}`;
-  assert.equal(await registry.ownerOf(namehash(full)), await customer.getAddress()); // customer owns it, not the platform
+  assert.equal(await registry["ownerOf(bytes32)"](namehash(full)), await customer.getAddress()); // customer owns it, not the platform
   const r = await api("GET", `/v1/names/${full}/resolve?network=bitcoin`);
   assert.equal(r.body.address, "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4");
 
@@ -398,7 +398,7 @@ test("crypto payments: ETH and ERC20 invoices are verified on-chain and complete
     return g.body.status === "completed" ? g : false;
   }, 15000, "invoice completion");
   assert.ok(done.body.regTx);
-  assert.equal(await registry.ownerOf(namehash(label + ".addr")), payerAddr);
+  assert.equal(await registry["ownerOf(bytes32)"](namehash(label + ".addr")), payerAddr);
   // the same txid can't pay a second invoice
   const inv2 = await api("POST", "/v1/invoices", { label: "y" + rnd(3), owner: payerAddr, years: 1, network: "ethereum", asset: "ETH" });
   assert.equal((await api("POST", `/v1/invoices/${inv2.body.id}/payment`, { txid: paidTx!.hash })).body.error.code, "txid_used");
@@ -430,7 +430,7 @@ test("on-chain ETH registration and renewal using the oracle price", async () =>
   const label = "q" + rnd(1); // 3 chars: $50
   const need: bigint = await registrarC.ethForUsd(50_000_000n);
   await registerOnChain(w, label, undefined, 1, need + 10n ** 15n);
-  assert.equal(await registry.ownerOf(namehash(label + ".addr")), await w.getAddress());
+  assert.equal(await registry["ownerOf(bytes32)"](namehash(label + ".addr")), await w.getAddress());
   const info = await api("GET", `/v1/names/${label}.addr`);
   assert.equal(info.body.status, "active");
   const r = await api("GET", `/v1/search?q=${label}`);

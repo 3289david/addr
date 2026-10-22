@@ -66,12 +66,19 @@ async function handleLog(log: Log, ts: number) {
         type = "name.renewed";
         data = { name: nameOf(node!), expiresAt: Number(a.expires) };
         break;
-      case "Transfer":
+      case "Transfer": {
+        // Two different Transfer events share this name now: the legacy
+        // Transfer(bytes32 node, address from, address to) and the new ERC-721
+        // Transfer(address from, address to, uint256 tokenId) added for marketplace
+        // compatibility — both fire for every ownership change. Only the legacy one
+        // carries anything this indexer needs; skip the ERC-721 one here.
+        if (parsed.fragment.inputs[0]?.type !== "bytes32") break;
         node = a.node;
         db.prepare("UPDATE names SET owner = ?, updated_block = ? WHERE node = ?").run(a.to, log.blockNumber, node);
         type = "name.transferred";
         data = { name: nameOf(node!), from: a.from, to: a.to };
         break;
+      }
       case "ResolverChanged":
         node = a.node;
         db.prepare("UPDATE names SET resolver = ? WHERE node = ?").run(a.resolver, node);
