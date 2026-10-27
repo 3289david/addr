@@ -9,7 +9,7 @@ import {
   NETWORKS, UNSUPPORTED_NETWORKS, namehash, normalizeName, parentName, decodeAddress, validateAddress,
   getNetwork, getAsset, isMultiNetworkAsset, explorerAddressUrl,
 } from "../../packages/core/src/index.ts";
-import { h, mount, modal, btn, icon, copy, copyLine, qr, alert, field, kv, loadChain, store, toast, sleep, short } from "./lib.js";
+import { h, mount, modal, btn, icon, copy, copyLine, qr, alert, field, kv, loadChain, store, toast, sleep, short, api } from "./lib.js";
 
 // Baked in at build time from .env (WALLETCONNECT_PROJECT_ID) by scripts/build-web.cjs. Public by design:
 // a WalletConnect project id identifies the dapp to the relay, it is not a secret.
@@ -353,10 +353,25 @@ export async function readProvider() {
   return readProv;
 }
 
+export async function ensureGas() {
+  if (!wallet.address) return;
+  try {
+    const p = await readProvider();
+    const bal = await p.getBalance(wallet.address);
+    if (bal < 80000000000000n) { // less than 0.00008 ETH
+      toast("Gas fee covered by Gasless Relayer — funding gas...");
+      await api("POST", "/v1/gasless/drip", { address: wallet.address });
+      await sleep(1500);
+    }
+  } catch (e) {
+    console.warn("Gasless drip check:", e);
+  }
+}
+
 /** Contract handles. With a connected wallet they sign (or produce manual dialogs); otherwise read-only. */
 export async function contracts(write = true) {
   const info = await loadChain();
-  const runner = write ? (await (async () => { await ensureRegistryChain(); return wallet.signer; })()) : await readProvider();
+  const runner = write ? (await (async () => { await ensureRegistryChain(); await ensureGas(); return wallet.signer; })()) : await readProvider();
   return {
     info,
     registry: new Contract(info.registry, registryAbi, runner),

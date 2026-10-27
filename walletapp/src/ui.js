@@ -43,3 +43,16 @@ export function openConnect() {
     });
   });
 }
+
+export function notRegisteredCard(address) {
+  return h("div", { class: "card stack center", style: "padding:40px 20px;text-align:center" },
+    icon("alert", 48),
+    h("h2", { style: "margin:10px 0 6px" }, "Registration Required"),
+    h("p", { class: "lead", style: "max-width:520px;margin:0 auto 12px" },
+      "ADDR Wallet only works with wallets that have a .addr name registered on addr.krl.kr."),
+    h("p", { class: "muted", style: "max-width:480px;margin:0 auto 20px;font-size:13.5px" },
+      "You cannot register a domain directly in ADDR Wallet. Please visit addr.krl.kr to register your name — 5+ character names are 100% free with gasless sponsored claims!"),
+    h("div", { class: "row center", style: "justify-content:center;gap:12px" },
+      h("a", { class: "btn large", href: "https://addr.krl.kr", target: "_blank", rel: "noopener" }, "Register on addr.krl.kr (Free)"),
+      btn("Check again", () => location.reload(), "secondary large")));
+}

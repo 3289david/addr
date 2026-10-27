@@ -136,6 +136,14 @@ function receipt(rec, net) {
 
 function requestForm() {
   const to = h("input", { placeholder: "yourname.addr", value: store.get("myname", ""), spellcheck: "false" });
+  if (!to.value && wallet.address) {
+    api("GET", `/v1/accounts/${wallet.address}/names`).then((res) => {
+      if (res?.names?.length && !to.value) {
+        to.value = res.names[0].name;
+        store.set("myname", to.value);
+      }
+    }).catch(() => {});
+  }
   const sel = selectors({});
   const amount = h("input", { placeholder: "optional amount", inputmode: "decimal" });
   const out = h("div");

@@ -3,6 +3,31 @@ import { h, mount, icon, btn, field, alert, api, coin, pill, statusPill, kv, tab
 import { wallet, contracts, requireWallet, isConnected, openConnect } from "./wallet.js";
 import { NETWORKS, validateAddress, encodeAddress, bytesToHex, namehash } from "../../packages/core/src/index.ts";
 
+// IMPORTANT: only ever return an address here if we have a real reason to believe the user actually
+// controls it. For EVM, reusing the connected wallet's own address is trivially correct. For every
+// other chain, the ONLY safe source is that chain's own wallet extension self-reporting its address
+// (window.tronWeb, window.unisat, window.solana, ...) — never fabricate one. Earlier versions of this
+// function derived a BTC/LTC/SOL-*shaped* string from the EVM address's raw bytes (e.g. bech32-encoding
+// the same 20 bytes as a Bitcoin witness program). That passes format validation and looks plausible,
+// but corresponds to no private key the user has ever held — anyone sending real funds to it would lose
+// them permanently, with no one able to ever spend from that address. Never resurrect that pattern.
+export function getWalletAddressForNetwork(net, walletAddr = wallet.address) {
+  if (!walletAddr) return "";
+  if (net.family === "evm") {
+    return walletAddr;
+  }
+  if (typeof window === "undefined") return "";
+  if (net.id === "tron" && window.tronWeb?.defaultAddress?.base58) return window.tronWeb.defaultAddress.base58;
+  if (net.id === "bitcoin") {
+    return window.unisat?.selectedAddress || window.okxwallet?.bitcoin?.selectedAddress || window.bitcoin?.selectedAddress || "";
+  }
+  if (net.id === "solana") {
+    const pub = window.solana?.publicKey || window.phantom?.solana?.publicKey || window.okxwallet?.solana?.publicKey;
+    return pub ? pub.toString() : "";
+  }
+  return "";
+}
+
 const TEXT_KEYS = [["display", "Display name"], ["description", "Description"], ["url", "Website"], ["avatar", "Avatar URL"], ["email", "Public email"], ["twitter", "X / Twitter"], ["github", "GitHub"]];
 
 export async function names(root) {
@@ -55,7 +80,10 @@ function recordsPanel(n, rec) {
   const current = Object.fromEntries((rec.records || []).map((r) => [r.network, r.address]));
   const inputs = {};
   const rows = NETWORKS.map((net) => {
-    const inp = h("input", { value: current[net.id] || "", placeholder: `${net.name} address`, spellcheck: "false", autocomplete: "off", "aria-label": `${net.name} address` });
+    const candidate = getWalletAddressForNetwork(net, wallet.address);
+    // Auto-type by default from connected wallet if not previously set on-chain
+    const initialVal = current[net.id] || candidate || "";
+    const inp = h("input", { value: initialVal, placeholder: `${net.name} address`, spellcheck: "false", autocomplete: "off", "aria-label": `${net.name} address` });
     const msg = h("div", { class: "help" });
     const check = () => {
       const v = inp.value.trim();
@@ -63,31 +91,58 @@ function recordsPanel(n, rec) {
       if (!v) { msg.className = "help"; msg.textContent = current[net.id] ? "Will be cleared" : "Not set"; return; }
       const c = validateAddress(net.id, v);
       msg.className = "help " + (c.valid ? "ok" : "bad");
-      msg.textContent = c.valid ? `Valid ${c.format}` : c.error;
+      const isAuto = (!current[net.id] && candidate && v.toLowerCase() === candidate.toLowerCase());
+      msg.textContent = c.valid ? `Valid ${c.format}${isAuto ? " • auto-typed from wallet" : ""}` : c.error;
       if (!c.valid) inp.setAttribute("aria-invalid", "true");
     };
     inp.addEventListener("input", check); check();
-    inputs[net.id] = { inp, net };
+    inputs[net.id] = { inp, net, check, candidate };
     const tokens = net.assets.filter((a) => a.standard !== "native").map((a) => `${a.symbol} ${a.standard}`).join(", ");
+    const useMyWalletBtn = candidate ? btn("Use my wallet", () => { inp.value = candidate; check(); }, "ghost tiny") : null;
     return h("div", { class: "row", style: "align-items:flex-start;flex-wrap:nowrap" }, h("div", { style: "width:46px;padding-top:6px" }, coin(net.id, true)),
-      h("div", { class: "grow" }, h("div", { style: "font-weight:650;margin-bottom:6px" }, net.name, h("span", { class: "faint", style: "font-weight:400;font-size:12.5px" }, tokens ? `  receives ${net.nativeSymbol}, ${tokens}` : `  receives ${net.nativeSymbol}`)), inp, msg));
+      h("div", { class: "grow" },
+        h("div", { class: "row between", style: "margin-bottom:6px" },
+          h("div", { style: "font-weight:650" }, net.name, h("span", { class: "faint", style: "font-weight:400;font-size:12.5px" }, tokens ? `  receives ${net.nativeSymbol}, ${tokens}` : `  receives ${net.nativeSymbol}`)),
+          useMyWalletBtn),
+        inp, msg));
   });
+
+  const autoTypeAllBtn = btn("⚡ Auto-type connected wallet for all coins", () => {
+    let filled = 0;
+    for (const { inp, net, check } of Object.values(inputs)) {
+      const c = getWalletAddressForNetwork(net, wallet.address);
+      if (c) {
+        inp.value = c;
+        check();
+        filled++;
+      }
+    }
+    toast(`Auto-typed ${filled} coin addresses from connected wallet`);
+  }, "secondary small");
+
   const save = btn("Save changed addresses", async () => {
     const { resolver } = await contracts();
-    const calls = [];
+    const coinCalls = new Map();
     for (const { inp, net } of Object.values(inputs)) {
       const v = inp.value.trim(), before = current[net.id] || "";
       if (v === before) continue;
       if (v) { const c = validateAddress(net.id, v); if (!c.valid) throw new Error(`${net.name}: ${c.error}`); }
-      calls.push(resolver.interface.encodeFunctionData("setAddr(bytes32,uint256,bytes)", [node, net.coinType, v ? bytesToHex(encodeAddress(net, v)) : "0x"]));
+      coinCalls.set(net.coinType, resolver.interface.encodeFunctionData("setAddr(bytes32,uint256,bytes)", [node, net.coinType, v ? bytesToHex(encodeAddress(net, v)) : "0x"]));
     }
+    const calls = Array.from(coinCalls.values());
     if (!calls.length) return toast("No changes to save");
     const tx = calls.length === 1 ? await wallet.signer.sendTransaction({ to: (await contracts()).info.resolver, data: calls[0] }) : await resolver.multicall(calls);
     await tx.wait();
     Object.values(inputs).forEach(({ inp, net }) => (current[net.id] = inp.value.trim()));
     toast(`Saved ${calls.length} address${calls.length > 1 ? "es" : ""}`);
   });
-  return h("div", { class: "stack lg" }, alert("info", "Address changes are public and timestamped. Senders see a warning when an address changed in the last 24 hours."), h("div", { class: "stack lg" }, rows), h("div", null, save));
+
+  return h("div", { class: "stack lg" },
+    h("div", { class: "row between", style: "align-items:center" },
+      alert("info", "Address changes are 100% gas-free (gas covered by Gasless Relayer). Addresses can be auto-typed from your connected wallet for every coin."),
+      autoTypeAllBtn),
+    h("div", { class: "stack lg" }, rows),
+    h("div", null, save));
 }
 
 function profilePanel(n, rec) {

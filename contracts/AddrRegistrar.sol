@@ -267,7 +267,12 @@ contract AddrRegistrar is Ownable2Step, ReentrancyGuard, EIP712 {
             if (freeSigner != address(0)) _checkVoucher(r.owner, lh, r.deadline, r.voucher);
             freeClaimed[r.owner] = true;
         } else {
-            paid = _collect(usd, r.token);
+            // Token payments are pulled from r.owner (not msg.sender): with a pre-existing allowance,
+            // this is what makes a *paid* registration gasless-relayable too, not just free claims —
+            // the owner never needs their own transaction or ETH for gas, only the token balance +
+            // one-time approval. ETH payments still need msg.value from whoever calls, so those stay
+            // tied to msg.sender — there's no way to redirect native ETH without the payer's own tx.
+            paid = _collect(usd, r.token, r.token == address(0) ? msg.sender : r.owner);
         }
         bytes32 node = _registerNode(r.label, r.owner, r.years_);
         if (free) freeNode[node] = true;
@@ -279,7 +284,7 @@ contract AddrRegistrar is Ownable2Step, ReentrancyGuard, EIP712 {
         bytes32 node = registry.nodeOf(registry.ROOT(), keccak256(bytes(label)));
         uint256 usd = renewalPriceFor(label) * years_;
         uint256 paid;
-        if (usd > 0) paid = _collect(usd, token);
+        if (usd > 0) paid = _collect(usd, token, token == address(0) ? msg.sender : registry.rawOwner(node));
         else if (msg.value != 0) revert PaymentFailed();
         _extend(node, years_);
         emit NameRenewed(node, years_, usd, usd > 0 ? token : address(0), paid);
@@ -310,7 +315,7 @@ contract AddrRegistrar is Ownable2Step, ReentrancyGuard, EIP712 {
         if (ECDSA.recover(digest, sig) != freeSigner) revert BadVoucher();
     }
 
-    function _collect(uint256 usdMicro, address token) internal returns (uint256 amount) {
+    function _collect(uint256 usdMicro, address token, address payer) internal returns (uint256 amount) {
         if (token == address(0)) {
             amount = ethForUsd(usdMicro);
             if (msg.value < amount) revert Underpaid(amount, msg.value);
@@ -323,7 +328,7 @@ contract AddrRegistrar is Ownable2Step, ReentrancyGuard, EIP712 {
         } else {
             if (msg.value != 0) revert PaymentFailed();
             amount = tokenForUsd(token, usdMicro);
-            IERC20(token).safeTransferFrom(msg.sender, treasury, amount);
+            IERC20(token).safeTransferFrom(payer, treasury, amount);
         }
     }
 

@@ -143,6 +143,22 @@ export async function primaryName(address) {
   return reverseOnChain(info, await readProvider(), address);
 }
 
+export async function getRegisteredNames(address) {
+  if (!address) return [];
+  try {
+    const res = await fetch(`https://addr.krl.kr/v1/accounts/${address}/names`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.names) && data.names.length > 0) return data.names;
+    }
+  } catch {}
+  try {
+    const pName = await primaryName(address);
+    if (pName) return [{ name: pName, level: "second" }];
+  } catch {}
+  return [];
+}
+
 export async function requireWallet(openConnectFn) {
   if (isConnected()) return true;
   return openConnectFn();

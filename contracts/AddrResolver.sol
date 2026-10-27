@@ -1,14 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {AddrRegistry} from "./AddrRegistry.sol";
 import {AddrName} from "./libraries/AddrName.sol";
 
 /// @title AddrResolver
 /// @notice Multichain address records (ENSIP-9 / ENSIP-11 coin types), text records and
 /// forward-verified reverse records. Records of expired or re-registered names are invisible.
-contract AddrResolver {
+/// Gasless writes: setAddrSigned/setPrimaryNameSigned let the owner sign an EIP-712 message
+/// authorizing a change and have anyone (in practice, ADDR's sponsored relayer) submit and pay gas
+/// for it. The signer is recovered and checked with the exact same registry.isAuthorised rule the
+/// plain msg.sender path uses — a relayed call can do nothing a direct call from the owner couldn't.
+contract AddrResolver is EIP712 {
     AddrRegistry public immutable registry;
+    mapping(address => uint256) public nonces;
+
+    bytes32 private constant SET_ADDR_TYPEHASH =
+        keccak256("SetAddr(bytes32 node,uint256 coinType,bytes value,uint256 nonce,uint256 deadline)");
+    bytes32 private constant SET_PRIMARY_NAME_TYPEHASH =
+        keccak256("SetPrimaryName(bytes32 node,string name,uint256 nonce,uint256 deadline)");
+
+    error Expired();
+    error BadSignature();
 
     struct Meta {
         uint64 updatedAt;
@@ -48,7 +63,7 @@ contract AddrResolver {
     uint256 internal constant COIN_ETH = 60;
     uint256 internal constant EVM_FLAG = 0x80000000;
 
-    constructor(AddrRegistry registry_) {
+    constructor(AddrRegistry registry_) EIP712("AddrResolver", "1") {
         registry = registry_;
     }
 
@@ -67,6 +82,36 @@ contract AddrResolver {
 
     function setAddr(bytes32 node, uint256 coinType, bytes memory a) public {
         _auth(node);
+        _setAddr(node, coinType, a);
+    }
+
+    /// @dev ENS-compatible ETH setter.
+    function setAddr(bytes32 node, address a) external {
+        setAddr(node, COIN_ETH, a == address(0) ? bytes("") : abi.encodePacked(a));
+    }
+
+    /// @notice Gasless setAddr: anyone can submit this on the owner's behalf, as long as it carries
+    /// a fresh (unused nonce, not-yet-expired) signature from an address registry.isAuthorised
+    /// accepts for this node — the exact same authorization setAddr() itself requires.
+    function setAddrSigned(
+        bytes32 node,
+        uint256 coinType,
+        bytes calldata a,
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
+    ) external {
+        if (block.timestamp > deadline) revert Expired();
+        bytes32 digest =
+            _hashTypedDataV4(keccak256(abi.encode(SET_ADDR_TYPEHASH, node, coinType, keccak256(a), nonce, deadline)));
+        address signer = ECDSA.recover(digest, signature);
+        if (nonce != nonces[signer]) revert BadSignature();
+        if (!registry.isActive(node) || !registry.isAuthorised(node, signer)) revert NotAuthorised();
+        nonces[signer] = nonce + 1;
+        _setAddr(node, coinType, a);
+    }
+
+    function _setAddr(bytes32 node, uint256 coinType, bytes memory a) internal {
         _validate(coinType, a);
         uint256 ep = _epoch(node);
         _addrs[node][ep][coinType] = a;
@@ -76,11 +121,6 @@ contract AddrResolver {
         m.version += 1;
         emit AddrChanged(node, coinType, a, m.version);
         if (coinType == COIN_ETH) emit AddressChanged(node, _bytesToAddress(a));
-    }
-
-    /// @dev ENS-compatible ETH setter.
-    function setAddr(bytes32 node, address a) external {
-        setAddr(node, COIN_ETH, a == address(0) ? bytes("") : abi.encodePacked(a));
     }
 
     function addr(bytes32 node, uint256 coinType) public view returns (bytes memory) {
@@ -131,6 +171,24 @@ contract AddrResolver {
         if (!_forwardOk(node, msg.sender)) revert NotVerified();
         _primary[msg.sender] = Primary(node, name);
         emit PrimaryNameSet(msg.sender, node, name);
+    }
+
+    /// @notice Gasless setPrimaryName, same signed-relay shape as setAddrSigned.
+    function setPrimaryNameSigned(string calldata name, uint256 nonce, uint256 deadline, bytes calldata signature)
+        external
+    {
+        if (block.timestamp > deadline) revert Expired();
+        (bytes32 node, bool ok) = AddrName.namehash(name);
+        if (!ok) revert InvalidName();
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(abi.encode(SET_PRIMARY_NAME_TYPEHASH, node, keccak256(bytes(name)), nonce, deadline))
+        );
+        address signer = ECDSA.recover(digest, signature);
+        if (nonce != nonces[signer]) revert BadSignature();
+        if (!_forwardOk(node, signer)) revert NotVerified();
+        nonces[signer] = nonce + 1;
+        _primary[signer] = Primary(node, name);
+        emit PrimaryNameSet(signer, node, name);
     }
 
     function clearPrimaryName() external {

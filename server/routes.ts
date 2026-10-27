@@ -17,13 +17,14 @@ import {
   listIssued, namespaceStatus, removeIssued, setRecordsForIssued,
 } from "./enterprise.ts";
 import { createInvoice, finalize, paymentMethods, publicInvoice, submitPayment, usdPrices } from "./payments.ts";
-import { publicSponsoredClaim, requestSponsoredClaim, sponsorClaimMessage } from "./sponsor.ts";
+import { dripGas, publicSponsoredClaim, requestSponsoredClaim, sponsorClaimMessage } from "./sponsor.ts";
 import { assertSafeWebhookUrl, EVENT_TYPES, requeue } from "./webhooks.ts";
 import { indexOnce } from "./indexer.ts";
 import { accountUsage, createAccountKey, deleteAccount, exportAccount, isAdminEmail, listKeys, logout, requestLogin, revokeKey, verifyCode, verifyToken } from "./accounts.ts";
 import { mailDnsStatus } from "./mail.ts";
 import { runRetention } from "./retention.ts";
 import { nftMetadata, nftImageSvg, nodeFromTokenId } from "./nft.ts";
+import { relayDomains, relayNonces, relaySetAddr, relaySetPrimaryName, relayTransfer } from "./relay.ts";
 import type { Principal } from "./auth.ts";
 
 function needSession(p: Principal): string {
@@ -161,6 +162,7 @@ export function registerRoutes() {
   route("GET", "/v1/free-claims/sponsor-message", (c) => ({ message: sponsorClaimMessage(str(c.query.get("label") ?? "", "label"), str(c.query.get("owner") ?? "", "owner")) }));
   route("POST", "/v1/free-claims/sponsored", async (c) => requestSponsoredClaim(c.req, str(c.body?.label, "label"), str(c.body?.owner, "owner"), str(c.body?.signature, "signature")));
   route("GET", "/v1/free-claims/sponsored/:id", async (c) => publicSponsoredClaim(c.params.id));
+  route("POST", "/v1/gasless/drip", async (c) => dripGas(c.req, str(c.body?.address, "address")));
 
   // --------------------------------------------------------------- keys + usage
   // --------------------------------------------------------------- sign-in (email, passwordless)
@@ -496,6 +498,15 @@ export function registerRoutes() {
     requireAdmin(c.req, c.principal);
     return indexOnce();
   });
+
+  // --------------------------------------------------------- gasless relay
+  // Address changes and transfers with no transaction and no gas from the owner — they sign an
+  // EIP-712 message for free, the operator submits it and pays gas. See server/relay.ts.
+  route("GET", "/v1/relay/domains", () => relayDomains());
+  route("GET", "/v1/relay/nonces/:address", (c) => relayNonces(c.params.address));
+  route("POST", "/v1/relay/set-addr", (c) => relaySetAddr(c.req, c.body));
+  route("POST", "/v1/relay/set-primary-name", (c) => relaySetPrimaryName(c.req, c.body));
+  route("POST", "/v1/relay/transfer", (c) => relayTransfer(c.req, c.body));
 
   // ------------------------------------------------------------------- NFT
   // registry.tokenURI(tokenId) points here. tokenId = uint256(node), the same identifier the

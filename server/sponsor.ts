@@ -3,11 +3,11 @@
 // cost) proving they control the destination wallet — without that, anyone could burn a stranger's one
 // free-name slot by registering an unwanted name into their wallet.
 import crypto from "node:crypto";
-import { getAddress, hexlify, keccak256, randomBytes, toUtf8Bytes, verifyMessage, ZeroAddress } from "ethers";
+import { getAddress, hexlify, keccak256, parseEther, randomBytes, toUtf8Bytes, verifyMessage, ZeroAddress } from "ethers";
 import { AddrError, normalizeLabel, validateAddress } from "../packages/core/src/index.ts";
 import { config } from "./config.ts";
 import { audit, db, now } from "./db.ts";
-import { chainNow, deployment, enqueueTx, freeSigner, operator, operatorAddress, registrar } from "./chain.ts";
+import { chainNow, deployment, enqueueTx, freeSigner, operator, operatorAddress, provider, registrar } from "./chain.ts";
 import { rateCheck } from "./enterprise.ts";
 import { emit } from "./webhooks.ts";
 import { clientIp, sha256 } from "./auth.ts";
@@ -125,4 +125,40 @@ export async function sponsorTick() {
 
 export function startSponsorWorker() {
   setInterval(() => sponsorTick().catch((e) => console.error("sponsor worker", e)), 5_000).unref();
+}
+
+export async function dripGas(req: IncomingMessage, targetAddressIn: string) {
+  if (!operator || !operatorAddress) {
+    throw new AddrError("sponsor_unavailable", "Gasless relayer is not available", 503);
+  }
+  if (!validateAddress("ethereum", targetAddressIn).valid) {
+    throw new AddrError("invalid_address", "target must be a valid EVM address", 422);
+  }
+  const target = getAddress(targetAddressIn);
+
+  rateCheck("drip:ip:" + sha256(clientIp(req) + "|" + new Date().toISOString().slice(0, 10)).slice(0, 24), 20);
+  rateCheck("drip:addr:" + target, 10);
+
+  const bal = await provider.getBalance(target);
+  if (bal >= parseEther("0.0001")) {
+    return { ok: true, message: "Wallet already has sufficient gas for Base", balance: bal.toString(), tx: null };
+  }
+
+  const opBal = await provider.getBalance(operatorAddress);
+  const DRIP_AMOUNT = parseEther("0.00015");
+  if (opBal < DRIP_AMOUNT * 2n) {
+    throw new AddrError("relayer_low_balance", "Gasless relayer balance is low", 503);
+  }
+
+  const hash = await enqueueTx(async () => {
+    const tx = await operator.sendTransaction({
+      to: target,
+      value: DRIP_AMOUNT,
+    });
+    const rc = await tx.wait();
+    return rc!.hash as string;
+  });
+
+  audit(null, "system", "sponsor.drip", target, { tx: hash, amount: "0.00015 ETH" });
+  return { ok: true, message: "Gas fee covered by Gasless Relayer", tx: hash, funded: "0.00015 ETH" };
 }

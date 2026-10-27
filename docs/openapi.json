@@ -730,6 +730,299 @@
         }
       }
     },
+    "/v1/gasless/drip": {
+      "post": {
+        "summary": "Fund a wallet with a small amount of Base ETH for gas, if it doesn't already have enough",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "address"
+                ],
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/relay/domains": {
+      "get": {
+        "summary": "EIP-712 domains/types for gasless relay signatures (setAddr, setPrimaryName, transfer)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/relay/nonces/{address}": {
+      "get": {
+        "summary": "Current relay nonces for an address, on both contracts",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "description": "EVM address",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/relay/set-addr": {
+      "post": {
+        "summary": "Gasless setAddr: submit an owner-signed EIP-712 authorization, the relayer pays gas",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "node",
+                  "coinType",
+                  "value",
+                  "nonce",
+                  "deadline",
+                  "signature"
+                ],
+                "properties": {
+                  "node": {
+                    "type": "string"
+                  },
+                  "coinType": {
+                    "type": "integer"
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "nonce": {
+                    "type": "integer"
+                  },
+                  "deadline": {
+                    "type": "integer"
+                  },
+                  "signature": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/relay/set-primary-name": {
+      "post": {
+        "summary": "Gasless setPrimaryName: submit an owner-signed EIP-712 authorization, the relayer pays gas",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "nonce",
+                  "deadline",
+                  "signature"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "nonce": {
+                    "type": "integer"
+                  },
+                  "deadline": {
+                    "type": "integer"
+                  },
+                  "signature": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/relay/transfer": {
+      "post": {
+        "summary": "Gasless name transfer: submit an owner-signed EIP-712 authorization, the relayer pays gas",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "node",
+                  "to",
+                  "nonce",
+                  "deadline",
+                  "signature"
+                ],
+                "properties": {
+                  "node": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "nonce": {
+                    "type": "integer"
+                  },
+                  "deadline": {
+                    "type": "integer"
+                  },
+                  "signature": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/email": {
       "post": {
         "summary": "Email a one-time sign-in code and link (open to anyone, creates the account on first sign-in)",

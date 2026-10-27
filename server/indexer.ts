@@ -186,9 +186,23 @@ export async function indexOnce(): Promise<{ from: number; to: number; logs: num
     if (head < from) return { from, to: head, logs: 0 };
     const addresses = Object.keys(kindOf);
     let total = 0;
-    for (let start = from; start <= head; start += 2000) {
-      const end = Math.min(start + 1999, head);
-      const logs = await provider.getLogs({ address: addresses, fromBlock: start, toBlock: end });
+    async function fetchLogs(fromBlock: number, toBlock: number): Promise<Log[]> {
+      try {
+        return await provider.getLogs({ address: addresses, fromBlock, toBlock });
+      } catch (e: any) {
+        if (toBlock > fromBlock && /range|limit|413|payload|reached/i.test(String(e?.message ?? "") + String(e?.info?.responseBody ?? ""))) {
+          const mid = Math.floor((fromBlock + toBlock) / 2);
+          const left = await fetchLogs(fromBlock, mid);
+          const right = await fetchLogs(mid + 1, toBlock);
+          return [...left, ...right];
+        }
+        throw e;
+      }
+    }
+    const CHUNK = 100;
+    for (let start = from; start <= head; start += CHUNK) {
+      const end = Math.min(start + CHUNK - 1, head);
+      const logs = await fetchLogs(start, end);
       logs.sort((x, y) => x.blockNumber - y.blockNumber || x.index - y.index);
       const blockTs = new Map<number, number>();
       for (const l of logs) {

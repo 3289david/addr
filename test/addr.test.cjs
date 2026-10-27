@@ -457,6 +457,104 @@ describe("ADDR contracts", function () {
     });
   });
 
+  describe("gasless relay (EIP-712 signed actions — address changes & contract actions with no gas from the owner)", () => {
+    async function signSetAddr(signer, node, coinType, value, nonce, deadline) {
+      const net = await ethers.provider.getNetwork();
+      const domain = { name: "AddrResolver", version: "1", chainId: net.chainId, verifyingContract: await resolver.getAddress() };
+      const types = { SetAddr: [{ name: "node", type: "bytes32" }, { name: "coinType", type: "uint256" }, { name: "value", type: "bytes" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
+      return signer.signTypedData(domain, types, { node, coinType, value, nonce, deadline });
+    }
+    async function signSetPrimaryName(signer, node, name, nonce, deadline) {
+      const net = await ethers.provider.getNetwork();
+      const domain = { name: "AddrResolver", version: "1", chainId: net.chainId, verifyingContract: await resolver.getAddress() };
+      const types = { SetPrimaryName: [{ name: "node", type: "bytes32" }, { name: "name", type: "string" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
+      return signer.signTypedData(domain, types, { node, name, nonce, deadline });
+    }
+    async function signTransfer(signer, node, to, nonce, deadline) {
+      const net = await ethers.provider.getNetwork();
+      const domain = { name: "AddrRegistry", version: "1", chainId: net.chainId, verifyingContract: await registry.getAddress() };
+      const types = { Transfer: [{ name: "node", type: "bytes32" }, { name: "to", type: "address" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
+      return signer.signTypedData(domain, types, { node, to, nonce, deadline });
+    }
+    const future = async (secs = 3600) => (await ethers.provider.getBlock("latest")).timestamp + secs;
+
+    it("setAddrSigned: a relayer (not the owner) submits, pays gas, and the record is set as if the owner called directly", async () => {
+      await commitAndRegister(alice, "gasless1", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "gasless1"));
+      const node = nh("gasless1.addr");
+      const value = ethers.hexlify(bob.address);
+      const deadline = await future();
+      const signature = await signSetAddr(alice, node, 60n, value, 0n, deadline);
+      // op (not alice) submits and pays gas; alice never sends a transaction
+      await (await resolver.connect(op).setAddrSigned(node, 60n, value, 0n, deadline, signature)).wait();
+      assert.equal((await resolver["addr(bytes32,uint256)"](node, 60n)).toLowerCase(), value.toLowerCase());
+      assert.equal(await resolver.nonces(alice.address), 1n);
+    });
+
+    it("setAddrSigned rejects: wrong signer (not authorised for the name), reused nonce, and expired deadline", async () => {
+      await commitAndRegister(alice, "gasless2", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "gasless2"));
+      const node = nh("gasless2.addr");
+      const value = ethers.hexlify(bob.address);
+      const deadline = await future();
+      // bob signs for a name he doesn't own
+      const badSig = await signSetAddr(bob, node, 60n, value, 0n, deadline);
+      await expectRevert(resolver.connect(op).setAddrSigned(node, 60n, value, 0n, deadline, badSig), "NotAuthorised");
+      // alice's real signature works once...
+      const goodSig = await signSetAddr(alice, node, 60n, value, 0n, deadline);
+      await (await resolver.connect(op).setAddrSigned(node, 60n, value, 0n, deadline, goodSig)).wait();
+      // ...and the exact same signature cannot be replayed
+      await expectRevert(resolver.connect(op).setAddrSigned(node, 60n, value, 0n, deadline, goodSig), "BadSignature");
+      // an expired deadline is rejected even with a fresh nonce
+      const expired = (await ethers.provider.getBlock("latest")).timestamp - 1;
+      const expiredSig = await signSetAddr(alice, node, 60n, value, 1n, expired);
+      await expectRevert(resolver.connect(op).setAddrSigned(node, 60n, value, 1n, expired, expiredSig), "Expired");
+    });
+
+    it("setPrimaryNameSigned sets the reverse record gaslessly", async () => {
+      await commitAndRegister(alice, "gasless3", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "gasless3"));
+      const node = nh("gasless3.addr");
+      const deadline = await future();
+      const signature = await signSetPrimaryName(alice, node, "gasless3.addr", 0n, deadline);
+      await (await resolver.connect(op).setPrimaryNameSigned("gasless3.addr", 0n, deadline, signature)).wait();
+      const [name] = await resolver.reverse(alice.address);
+      assert.equal(name, "gasless3.addr");
+    });
+
+    it("transferSigned moves ownership with the relayer paying gas, respects locks, and cannot be replayed", async () => {
+      await commitAndRegister(alice, "gasless4", alice.address, 1, ethers.ZeroAddress, await voucherFor(alice.address, "gasless4"));
+      const node = nh("gasless4.addr");
+      const deadline = await future();
+      const signature = await signTransfer(alice, node, bob.address, 0n, deadline);
+      await (await registry.connect(op).transferSigned(node, bob.address, 0n, deadline, signature)).wait();
+      assert.equal(await registry["ownerOf(bytes32)"](node), bob.address);
+      await expectRevert(registry.connect(op).transferSigned(node, bob.address, 0n, deadline, signature), "BadSignature");
+      // locked names cannot be transferred, signed or not
+      await commitAndRegister(carol, "gasless5", carol.address, 1, ethers.ZeroAddress, await voucherFor(carol.address, "gasless5"));
+      const node2 = nh("gasless5.addr");
+      await registry.connect(carol).lock(node2, await future(2 * DAY));
+      const sig2 = await signTransfer(carol, node2, alice.address, 0n, await future());
+      await expectRevert(registry.connect(op).transferSigned(node2, alice.address, 0n, await future(), sig2), "NameLockedError");
+    });
+
+    it("paid registration can be relayed in a token the owner pre-approved, without the owner sending any transaction", async () => {
+      // "paid" (non-free) label; alice pre-approves the registrar once (this one approval is the
+      // only on-chain action she needs — commit+register are both submitted by op).
+      await usdc.mint(alice.address, 100_000_000n);
+      await usdc.connect(alice).approve(await registrar.getAddress(), 100_000_000n);
+      const label = "rlyd"; // under 5 chars: not free-tier eligible, forces the paid path
+      const secret = ethers.hexlify(ethers.randomBytes(32));
+      const commitment = await registrar.makeCommitment(label, alice.address, secret);
+      await (await registrar.connect(op).commit(commitment)).wait();
+      await increase(61);
+      const before = await usdc.balanceOf(treasury.address);
+      await (await registrar.connect(op).register(
+        { label, owner: alice.address, years_: 1, token: await usdc.getAddress(), secret, deadline: 0, voucher: "0x" },
+      )).wait();
+      assert.ok((await usdc.balanceOf(treasury.address)) > before, "treasury received alice's token payment, not op's");
+      assert.equal(await usdc.balanceOf(op.address), 0n, "op never paid the price, only gas");
+      assert.equal(await registry["ownerOf(bytes32)"](nh(`${label}.addr`)), alice.address);
+    });
+  });
+
   describe("two-step admin and treasury", () => {
     it("ownership handoff needs acceptance", async () => {
       await registrar.transferOwnership(alice.address);

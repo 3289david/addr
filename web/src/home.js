@@ -132,24 +132,25 @@ function registerPanel(x) {
   const payment = h("select", { "aria-label": "Payment method" });
   const stepsBox = h("div");
   const out = h("div");
+  if (x.price.free) {
+    payment.append(h("option", { value: "sponsored" }, "Free — 100% gas covered by Gasless Relayer"));
+    years.disabled = true;
+    payment.disabled = true;
+    payment.value = "sponsored";
+  }
   (async () => {
+    if (x.price.free) return;
     const methods = await api("GET", "/v1/payments/methods").catch(() => ({ methods: [] }));
     const c = await loadChain();
-    if (x.price.free) {
-      payment.append(h("option", { value: "sponsored" }, "Free — no gas needed"));
-      payment.append(h("option", { value: "free" }, "Free tier (pay your own gas)"));
-      years.disabled = true; payment.disabled = true;
-    }
     payment.append(h("option", { value: "eth" }, `${c.chain.currency} on ${c.chain.name} (wallet)`));
     for (const [sym, addr] of Object.entries(c.acceptedTokens || {})) if (addr) payment.append(h("option", { value: `token:${addr}` }, `${sym} on ${c.chain.name} (wallet)`));
     for (const m of methods.methods) payment.append(h("option", { value: `coin:${m.network}:${m.asset}:${m.standard}` }, `${m.asset}${m.standard !== "native" ? " " + m.standard : ""} on ${m.networkName} (pay from any wallet)`));
-    if (x.price.free) payment.value = "sponsored";
   })();
 
-  const go = btn(x.price.free ? "Claim free name" : "Register", async () => {
+  const go = btn(x.price.free ? "Claim free name (100% gas-free)" : "Register", async () => {
     mount(out);
     if (!(await requireWallet())) return;
-    const mode = payment.value, yrs = Number(years.value), owner = wallet.address;
+    const mode = x.price.free ? "sponsored" : payment.value, yrs = Number(years.value), owner = wallet.address;
     if (mode.startsWith("coin:")) {
       const [, network, asset, standard] = mode.split(":");
       const inv = await api("POST", "/v1/invoices", { label, owner, years: yrs, network, asset, standard });
@@ -176,7 +177,7 @@ function registerPanel(x) {
         claim = await api("GET", `/v1/free-claims/sponsored/${claim.id}`);
       }
       mount(out);
-      if (claim.status === "failed") { mount(out, alert("bad", claim.error || "Sponsored claim failed. Try again, or use “Free tier” instead.")); return; }
+      if (claim.status === "failed") { mount(out, alert("bad", claim.error || "Sponsored claim failed. Please try again.")); return; }
       mount(stepsBox, steps(names, 4));
       const { info } = await contracts(false);
       const l = explorerTx(info, claim.registerTx);

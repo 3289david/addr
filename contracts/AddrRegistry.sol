@@ -7,6 +7,8 @@ import {IERC721Metadata} from "@openzeppelin/contracts/token/ERC721/extensions/I
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {AddrName} from "./libraries/AddrName.sol";
 
 interface IAddrResolverHook {
@@ -21,7 +23,7 @@ interface IAddrResolverHook {
 /// marketplace (OpenSea, Blur, ...) without that marketplace needing to know anything
 /// .addr-specific. The ERC-721 surface is purely additive over the existing node-keyed model —
 /// transfer(), register() etc. keep their exact original behavior and events.
-contract AddrRegistry is Ownable2Step, IERC721, IERC721Metadata {
+contract AddrRegistry is Ownable2Step, IERC721, IERC721Metadata, EIP712 {
     // namehash("addr")
     bytes32 public constant ROOT = keccak256(abi.encodePacked(bytes32(0), keccak256("addr")));
     uint64 public constant GRACE_PERIOD = 30 days;
@@ -96,8 +98,15 @@ contract AddrRegistry is Ownable2Step, IERC721, IERC721Metadata {
     error ParentControlGone();
     error BadRecovery();
     error TransferRejected();
+    error Expired();
+    error BadSignature();
 
-    constructor(address admin) Ownable(admin) {}
+    /// @notice Gasless transfer(): anyone (in practice, ADDR's sponsored relayer) can submit this on
+    /// the owner's behalf given a fresh signature — same shape as AddrResolver's signed writes.
+    mapping(address => uint256) public nonces;
+    bytes32 private constant TRANSFER_TYPEHASH = keccak256("Transfer(bytes32 node,address to,uint256 nonce,uint256 deadline)");
+
+    constructor(address admin) Ownable(admin) EIP712("AddrRegistry", "1") {}
 
     modifier onlyController() {
         if (!controllers[msg.sender]) revert NotController();
@@ -230,11 +239,28 @@ contract AddrRegistry is Ownable2Step, IERC721, IERC721Metadata {
     // ------------------------------------------------------------ owner actions
 
     function transfer(bytes32 node, address to) external {
+        _doTransfer(node, to, msg.sender);
+    }
+
+    /// @notice Gasless transfer: valid only with a fresh (unused nonce, unexpired) signature from
+    /// the owner or an approved-for-all operator — the same set of callers transfer() itself allows.
+    function transferSigned(bytes32 node, address to, uint256 nonce, uint256 deadline, bytes calldata signature)
+        external
+    {
+        if (block.timestamp > deadline) revert Expired();
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(TRANSFER_TYPEHASH, node, to, nonce, deadline)));
+        address signer = ECDSA.recover(digest, signature);
+        if (nonce != nonces[signer]) revert BadSignature();
+        nonces[signer] = nonce + 1;
+        _doTransfer(node, to, signer);
+    }
+
+    function _doTransfer(bytes32 node, address to, address authorizer) internal {
         if (!isActive(node)) revert NameNotActive();
         if (to == address(0)) revert InvalidAddress();
         Node storage n = _nodes[node];
         address from = n.owner;
-        if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorised();
+        if (authorizer != from && !isApprovedForAll[from][authorizer]) revert NotAuthorised();
         if (n.lockedUntil > block.timestamp) revert NameLockedError();
         _moveOwnership(node, to);
         emit Transfer(node, from, to);

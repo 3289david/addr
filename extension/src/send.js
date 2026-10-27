@@ -2,9 +2,9 @@ import { h, mount, icon, btn, field, alert, kv, pill, qr, copy, copyLine, short,
 import { NETWORKS, getNetwork, paymentUri, parseUnits } from "../../packages/core/src/index.ts";
 import { resolveOnChain } from "../../packages/core/src/wallet-client.ts";
 import { Interface } from "ethers";
-import { wallet, isConnected, readProvider, ensureChain, requireWallet } from "./connect.js";
+import { wallet, isConnected, readProvider, ensureChain, requireWallet, getRegisteredNames } from "./connect.js";
 import { loadChain } from "./chain.js";
-import { openConnect } from "./ui.js";
+import { openConnect, notRegisteredCard } from "./ui.js";
 
 function selectors(initial = {}) {
   const net = h("select", { "aria-label": "Network" }, NETWORKS.map((n) => h("option", { value: n.id }, n.name)));
@@ -17,6 +17,19 @@ function selectors(initial = {}) {
 }
 
 export async function send(root) {
+  if (!isConnected()) {
+    mount(root, h("div", { class: "card stack center", style: "padding:40px 20px" },
+      icon("send", 40),
+      h("h2", { style: "margin:8px 0 0" }, "Connect a wallet"),
+      h("p", { class: "muted", style: "margin:0" }, "Connect your wallet to send to .addr names."),
+      btn("Connect wallet", async () => { if (await requireWallet(() => openConnect())) send(root); }, "large")));
+    return;
+  }
+  const namesList = await getRegisteredNames(wallet.address);
+  if (!namesList.length) {
+    mount(root, notRegisteredCard(wallet.address));
+    return;
+  }
   const to = h("input", { placeholder: "name.addr", spellcheck: "false", autocomplete: "off", autocapitalize: "off", "aria-label": "Recipient name" });
   const sel = selectors();
   const amount = h("input", { placeholder: "0.00", inputmode: "decimal", "aria-label": "Amount" });

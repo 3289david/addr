@@ -1,7 +1,7 @@
 import { h, mount, icon, btn, pill, short, copy, copyLine, skeleton } from "../../web/src/lib.js";
 import { JsonRpcProvider, formatEther } from "ethers";
-import { wallet, isConnected, primaryName, disconnect } from "./connect.js";
-import { openConnect } from "./ui.js";
+import { wallet, isConnected, primaryName, disconnect, getRegisteredNames } from "./connect.js";
+import { openConnect, notRegisteredCard } from "./ui.js";
 
 // A small curated set of well-known public RPCs, for the dashboard's cross-chain balance view only —
 // separate from the ADDR registry chain's own RPC (which comes from the baked-in deployment config).
@@ -27,7 +27,13 @@ export async function dashboard(root) {
 }
 
 async function render(root) {
-  const name = await primaryName(wallet.address).catch(() => null);
+  const namesList = await getRegisteredNames(wallet.address);
+  if (!namesList.length) {
+    mount(root, notRegisteredCard(wallet.address));
+    return;
+  }
+  const primary = await primaryName(wallet.address).catch(() => null);
+  const name = primary || namesList[0]?.name || null;
   const balRows = h("div", { class: "stack" }, skeleton(3));
   mount(root, h("div", { class: "stack lg" },
     h("div", { class: "card stack" },
